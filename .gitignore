@@ -1,0 +1,5 @@
+## Ignore build files
+/target
+
+## Ignore Cargo.lock for lib crate
+Cargo.lock
