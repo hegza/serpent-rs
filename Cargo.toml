@@ -16,7 +16,7 @@ path = "examples/transpile-simple.rs"
 # Python AST
 rustpython-parser = { version = "0.1.1" }
 # Rust AST
-syn = { version = "1.0.17", features = ["full", "clone-impls"] }
+syn = { version = "1.0.17", features = ["full", "clone-impls", "extra-traits"] }
 derive_deref = "1.1.0"
 # `quote` "^1.0" matching with `syn` "1.0.17"
 quote = "^1.0"
