@@ -1,4 +1,4 @@
-mod transpiler;
+mod transpile;
 
 use derive_deref::Deref;
 use parser::parse_program;
@@ -61,7 +61,7 @@ struct RsStmt(pub syn::Stmt);
 
 impl From<Statement> for RsStmt {
     fn from(py_stmt: Statement) -> Self {
-        let rs_stmt = transpiler::visit_statement(py_stmt);
+        let rs_stmt = transpile::visit_statement(py_stmt);
         RsStmt(rs_stmt)
     }
 }
