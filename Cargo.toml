@@ -15,18 +15,20 @@ path = "examples/transpile-simple.rs"
 [dependencies]
 # Python AST
 rustpython-parser = { version = "0.1.1" }
-# Rust AST
-syn = { version = "1.0.17", features = ["full", "clone-impls", "extra-traits"] }
-derive_deref = "1.1.0"
-# `quote` "^1.0" matching with `syn` "1.0.17"
-quote = "^1.0"
 # `num-bigint` "^0.2" matching with `rustpython-parser` "0.1.1"
 num-bigint = "^0.2"
+
+# Rust AST
+syn = { version = "1.0.17", features = ["full", "clone-impls", "extra-traits"] }
+# `quote` "^1.0" matching with `syn` "1.0.17"
+quote = "^1.0"
 # `proc-macro2` "^1.0.7" matching with `syn` "1.0.17"
 proc-macro2 = "^1.0.7"
+
+derive_deref = "^1.1"
 log = "^0.4"
 env_logger = "^0.7"
-rustfmt = "0.10.0"
+rustfmt = "^0.10"
 
 [dev-dependencies]
-sourcefile = "0.1.4"
+sourcefile = "^0.1"
