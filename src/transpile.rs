@@ -39,12 +39,12 @@ fn visit_return(value: Option<Expression>) -> syn::Expr {
 }
 
 fn visit_function_def(
-    is_async: bool,
+    _is_async: bool,
     name: String,
     args: Box<Parameters>,
     body: Suite,
-    decorator_list: Vec<Expression>,
-    returns: Option<Expression>,
+    _decorator_list: Vec<Expression>,
+    _returns: Option<Expression>,
 ) -> syn::Stmt {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
@@ -217,11 +217,7 @@ fn visit_expression(expr: &Expression) -> rs_ast::Expr {
                 },
             },
         }),
-        ExpressionType::Call {
-            function,
-            args,
-            keywords,
-        } => syn::Expr::Call(syn::ExprCall {
+        ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
             attrs: vec![],
             func: Box::new(visit_expression(&*function)),
             paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
