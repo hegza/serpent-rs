@@ -3,7 +3,6 @@ pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
 
 use super::*;
-use crate::error::Result;
 use derive_deref::Deref;
 use log::{debug, trace};
 use num_bigint::BigInt;
@@ -11,20 +10,25 @@ use quote::ToTokens;
 use recontextualize::recontextualize;
 use rustpython_parser::ast::*;
 use rustpython_parser::parser;
+use std::convert::TryFrom;
+use std::{fmt, result};
 use syn;
 
-/// Transpiles given Python source code to Rust
-pub fn transpile_python(src: PySource) -> Result<String> {
+/// A type alias for `Result<T, serpent::TranspileError>`.
+pub type Result<T> = result::Result<T, TranspileError>;
+
+/// Transpiles given Python source code to Rust source code.
+pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
     let generator = match src {
         PySource::Program(s, ProgramKind::Runnable) => {
             // Parse source into a program using RustPython
             let program = parser::parse_program(s)?;
 
             // Add back unsupported context like comments
-            let py_lines = recontextualize(s, program)?;
+            let py_nodes = recontextualize(s, program)?;
 
             RsGenerator {
-                py_program: py_lines,
+                py_program: py_nodes,
             }
         }
         PySource::Program(_s, ProgramKind::NonRunnable) => {
@@ -36,6 +40,32 @@ pub fn transpile_python(src: PySource) -> Result<String> {
     generator.generate()
 }
 
+#[derive(Debug)]
+pub enum TranspileError {
+    /// An error that occurred while transpiling the Python AST into Rust. A transform for this
+    /// Python AST node was not implemented.
+    Unimplemented { node: Box<dyn fmt::Debug> },
+}
+
+impl TranspileError {
+    fn unimplemented<D: 'static>(node: &D) -> TranspileError
+    where
+        D: Clone + fmt::Debug,
+    {
+        TranspileError::Unimplemented {
+            node: Box::new(node.clone()),
+        }
+    }
+}
+
+impl fmt::Display for TranspileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TranspileError::Unimplemented { node } => write!(f, "Unimplemented node: {:?}", node),
+        }
+    }
+}
+
 /// Represents what's required to generate a Rust program from Python source.
 ///
 /// Call .generate() to produce a program.
@@ -43,7 +73,7 @@ struct RsGenerator {
     /// The original Python program parsed as a vector of nodes, containing single or multiline
     /// statements and unknown entries (whitespace, comments, other). Contains location as context
     /// for each entry.
-    py_program: Vec<PyNode>,
+    py_program: Vec<(PyNode, String)>,
 }
 
 /// Anything and everything required to create an expression in Rust. Has a close match to "a line"
@@ -65,12 +95,21 @@ enum RsNode {
 }
 
 impl RsGenerator {
-    fn generate(&self) -> Result<String> {
+    fn generate(&self) -> crate::error::Result<String> {
+        // Create a Rust node for each Python node
         let mut rs_nodes = vec![];
-
-        for node in &self.py_program {
+        for (line_no, &(ref node, ref chars)) in self.py_program.iter().enumerate() {
             let rs_node = match node {
-                PyNode::Statement(stmt) => RsNode::Statement(visit_statement(&stmt)),
+                PyNode::Statement(stmt) => match visit_statement(&stmt) {
+                    Ok(rs_stmt) => RsNode::Statement(rs_stmt),
+                    Err(err) => {
+                        return Err(crate::Error::new(ErrorKind::Transpile {
+                            line: chars.to_string(),
+                            line_no,
+                            reason: err,
+                        }))
+                    }
+                },
                 _ => unimplemented!(),
             };
             rs_nodes.push(rs_node);
@@ -120,23 +159,26 @@ impl RsGenerator {
 #[derive(Clone, Deref)]
 struct RsStmt(pub syn::Stmt);
 
-impl From<Statement> for RsStmt {
-    fn from(py_stmt: Statement) -> Self {
-        let rs_stmt = visit_statement(&py_stmt);
-        RsStmt(rs_stmt)
+impl TryFrom<Statement> for RsStmt {
+    type Error = TranspileError;
+
+    fn try_from(py_stmt: Statement) -> Result<Self> {
+        let rs_stmt = visit_statement(&py_stmt)?;
+        Ok(RsStmt(rs_stmt))
     }
 }
 
-pub fn visit_statement(stmt: &Statement) -> syn::Stmt {
+pub fn visit_statement(stmt: &Statement) -> Result<syn::Stmt> {
     let _location = &stmt.location;
     let stmt = &stmt.node;
     trace!("visit: {:?}", stmt);
 
-    use StatementType::*;
     match stmt {
-        Assign { targets, value } => visit_assign(&targets, &value),
-        Expression { expression } => syn::Stmt::Expr(visit_expression(&expression)),
-        FunctionDef {
+        StatementType::Assign { targets, value } => visit_assign(&targets, &value),
+        StatementType::Expression { expression } => {
+            Ok(syn::Stmt::Expr(visit_expression(&expression)?))
+        }
+        StatementType::FunctionDef {
             is_async,
             name,
             args,
@@ -151,21 +193,19 @@ pub fn visit_statement(stmt: &Statement) -> syn::Stmt {
             decorator_list,
             returns.as_ref(),
         ),
-        Return { value } => syn::Stmt::Expr(visit_return(value.as_ref())),
-        _ => {
-            println!("unimplemented: {:?}", stmt);
-            unimplemented!()
-        }
+        StatementType::Return { value } => Ok(syn::Stmt::Expr(visit_return(value.as_ref())?)),
+        _stmt => unimplemented!(),
     }
 }
 
-fn visit_return(value: Option<&Expression>) -> syn::Expr {
+fn visit_return(value: Option<&Expression>) -> Result<syn::Expr> {
+    let expr = value.and(Some(Box::new(visit_expression(&value.unwrap())?)));
     let expr_return = syn::ExprReturn {
         attrs: vec![],
         return_token: <syn::Token![return]>::default(),
-        expr: value.and_then(|e| Some(Box::new(visit_expression(&e)))),
+        expr,
     };
-    syn::Expr::Return(expr_return)
+    Ok(syn::Expr::Return(expr_return))
 }
 
 fn visit_function_def(
@@ -175,7 +215,7 @@ fn visit_function_def(
     body: &Suite,
     _decorator_list: &[Expression],
     _returns: Option<&Expression>,
-) -> syn::Stmt {
+) -> Result<syn::Stmt> {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
         constness: None,
@@ -195,7 +235,7 @@ fn visit_function_def(
         variadic: None,
         output: syn::ReturnType::Default,
     };
-    let block = visit_body(body); // {}
+    let block = visit_body(body)?; // { ... }
     let item_fn = syn::ItemFn {
         attrs: vec![],
         vis: syn::Visibility::Public(syn::VisPublic {
@@ -205,7 +245,7 @@ fn visit_function_def(
         block: Box::new(block),
     };
     let item = syn::Item::Fn(item_fn);
-    syn::Stmt::Item(item)
+    Ok(syn::Stmt::Item(item))
 }
 
 fn visit_params(args: &Parameters) -> syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> {
@@ -270,18 +310,18 @@ where
     }
 }
 
-fn visit_body(body: &Suite) -> syn::Block {
+fn visit_body(body: &Suite) -> Result<syn::Block> {
     let stmts = body
         .into_iter()
         .map(|py_stmt| visit_statement(&py_stmt))
-        .collect::<Vec<syn::Stmt>>();
-    syn::Block {
+        .collect::<Result<Vec<syn::Stmt>>>()?;
+    Ok(syn::Block {
         brace_token: syn::token::Brace(proc_macro2::Span::call_site()),
         stmts,
-    }
+    })
 }
 
-fn visit_assign(targets: &[Expression], value: &Expression) -> syn::Stmt {
+fn visit_assign(targets: &[Expression], value: &Expression) -> Result<syn::Stmt> {
     trace!("visit: Assign({:?}, {:?})", targets, value);
     let lhs_target = if targets.len() == 1 {
         let target = targets.first().unwrap();
@@ -318,23 +358,23 @@ fn visit_assign(targets: &[Expression], value: &Expression) -> syn::Stmt {
         pat: lhs_target,
         init: Some((
             <syn::Token![=]>::default(),
-            Box::new(visit_expression(value)),
+            Box::new(visit_expression(value)?),
         )),
         semi_token: <syn::Token![;]>::default(),
     };
     let local = syn::Stmt::Local(local);
     debug!("Assign({:?}, {:?}) -> {:?}", &targets, &value, &local);
-    local
+    Ok(local)
 }
 
-fn visit_expression(expr: &Expression) -> syn::Expr {
+fn visit_expression(expr: &Expression) -> Result<syn::Expr> {
     trace!("visit: {:?}", expr);
-    let _location = &expr.location;
+    let location = &expr.location;
     let expr = &expr.node;
 
     let rs_expr = match expr {
-        ExpressionType::Number { value } => visit_number(&value),
-        ExpressionType::Binop { a, op, b } => visit_binop(a, op, b),
+        ExpressionType::Number { value } => visit_number(&value)?,
+        ExpressionType::Binop { a, op, b } => visit_binop(a, op, b)?,
         ExpressionType::Identifier { name } => syn::Expr::Path(syn::ExprPath {
             attrs: vec![],
             qself: None,
@@ -352,36 +392,38 @@ fn visit_expression(expr: &Expression) -> syn::Expr {
         }),
         ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
             attrs: vec![],
-            func: Box::new(visit_expression(&*function)),
+            func: Box::new(visit_expression(&*function)?),
             paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-            args: visit_args(args),
+            args: visit_args(args)?,
         }),
         _ => {
-            println!("unimplemented: {:?}", expr);
+            println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
             unimplemented!()
         }
     };
     debug!("{:?} -> {:?}", &expr, &rs_expr);
-    rs_expr
+    Ok(rs_expr)
 }
 
-fn visit_args(args: &[Expression]) -> syn::punctuated::Punctuated<syn::Expr, syn::token::Comma> {
+fn visit_args(
+    args: &[Expression],
+) -> Result<syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
     let mut list = syn::punctuated::Punctuated::new();
     for arg in args {
-        let rust_arg = visit_expression(&arg);
+        let rust_arg = visit_expression(&arg)?;
         list.push(rust_arg);
     }
-    list
+    Ok(list)
 }
 
-fn visit_binop(a: &Box<Expression>, op: &Operator, b: &Box<Expression>) -> syn::Expr {
+fn visit_binop(a: &Box<Expression>, op: &Operator, b: &Box<Expression>) -> Result<syn::Expr> {
     let bin_expr = syn::ExprBinary {
         attrs: vec![],
-        left: Box::new(visit_expression(&a)),
+        left: Box::new(visit_expression(&a)?),
         op: visit_bin_op(op),
-        right: Box::new(visit_expression(&b)),
+        right: Box::new(visit_expression(&b)?),
     };
-    syn::Expr::Binary(bin_expr)
+    Ok(syn::Expr::Binary(bin_expr))
 }
 
 fn visit_bin_op(op: &Operator) -> syn::BinOp {
@@ -394,18 +436,18 @@ fn visit_bin_op(op: &Operator) -> syn::BinOp {
     }
 }
 
-fn visit_number(number: &Number) -> syn::Expr {
+fn visit_number(number: &Number) -> Result<syn::Expr> {
     trace!("visit: {:?}", number);
     use Number::*;
     let rs_number = match number {
-        Integer { value } => visit_bigint(&value),
+        Integer { value } => visit_bigint(&value)?,
         _ => unimplemented!(),
     };
     debug!("{:?} -> {:?}", &number, rs_number);
-    rs_number
+    Ok(rs_number)
 }
 
-fn visit_bigint(bigint: &BigInt) -> syn::Expr {
+fn visit_bigint(bigint: &BigInt) -> Result<syn::Expr> {
     trace!("visit: {:?}", bigint);
     let (sign, data) = bigint.to_u32_digits();
     let value: u32 = {
@@ -423,8 +465,8 @@ fn visit_bigint(bigint: &BigInt) -> syn::Expr {
                 lit: syn::Lit::new(literal),
             })
         }
-        _ => unimplemented!(),
+        _ => return Err(TranspileError::unimplemented(bigint)),
     };
     debug!("{:?} -> {:?}", bigint, expr);
-    expr
+    Ok(expr)
 }

@@ -10,24 +10,26 @@ use std::error::Error as StdError;
 use std::fmt;
 
 /// Parses a Python source into a list of line-kind identifiers.
-pub(crate) fn identify_lines(src: &str) -> Result<Vec<LineKind>> {
+pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
     // Verify that source parses
     debug_assert!(parse_program(src).is_ok());
 
     let mut lines = src.lines();
     let line_count = lines.clone().count();
 
+    // Go over all lines in the source, and describe the lines in terms of their type
     let mut line_kinds = Vec::with_capacity(line_count);
     loop {
         if let Some(line) = lines.next() {
-            if is_newline(line) {
-                line_kinds.push(LineKind::Newline);
-            } else if is_comment(line) {
-                line_kinds.push(LineKind::Comment(line.to_owned()));
+            let line = line.to_owned();
+            if is_newline(&line) {
+                line_kinds.push((LineKind::Newline, line));
+            } else if is_comment(&line) {
+                line_kinds.push((LineKind::Comment(line.to_owned()), line));
             }
             // Identify the line as a statement, if it's not whitespace or a comment
             else {
-                let mut len = 1;
+                let mut len_lines = 1;
                 let mut stmt_constituents = vec![line];
                 // Loop, adding a line to the statement candidate each time. The number of iterations until a valid statement can be constructed determines the length of the statement
                 loop {
@@ -41,9 +43,9 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<LineKind>> {
                         Err(_) => {
                             // Get the next line, returning error if the file ends.
                             let next = lines.next();
-                            len += 1;
+                            len_lines += 1;
                             match next {
-                                Some(next) => stmt_constituents.push(next),
+                                Some(next) => stmt_constituents.push(next.to_owned()),
                                 None => {
                                     return Err(Error::new(ErrorKind::IdentifyLines(
                                         IdentifyLinesError::EofWhileConstructingStatement,
@@ -54,8 +56,8 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<LineKind>> {
                         }
                     }
                 }
-                for n in 0..len {
-                    line_kinds.push(LineKind::Statement(n));
+                for n in 0..len_lines {
+                    line_kinds.push((LineKind::Statement(n), stmt_constituents[n].to_string()));
                 }
             }
         } else {
@@ -147,11 +149,19 @@ print(
     #[test]
     fn lines_are_identified() {
         assert_eq!(
-            &identify_lines(PYTHON_SOURCE).unwrap(),
+            &identify_lines(PYTHON_SOURCE)
+                .unwrap()
+                .into_iter()
+                .map(|(kind, line)| kind)
+                .collect::<Vec<LineKind>>(),
             &PYTHON_SOURCE_IDENTIFIED.to_vec()
         );
         assert_eq!(
-            &identify_lines(PYTHON_SOURCE_2).unwrap(),
+            &identify_lines(PYTHON_SOURCE_2)
+                .unwrap()
+                .into_iter()
+                .map(|(kind, line)| kind)
+                .collect::<Vec<LineKind>>(),
             &PYTHON_SOURCE_2_IDENTIFIED.to_vec()
         );
     }

@@ -29,11 +29,13 @@ use std::fmt;
 use std::io;
 use std::result;
 
-use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
+use crate::transpile::{
+    identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError, TranspileError,
+};
 use rustpython_parser::error::ParseError;
 use rustpython_parser::location::Location;
 
-/// A type alias for `Result<T, csv::Error>`.
+/// A type alias for `Result<T, serpent::Error>`.
 pub type Result<T> = result::Result<T, Error>;
 
 /// An error that can occur when transpiling Python to Rust.
@@ -87,7 +89,15 @@ pub enum ErrorKind {
     /// A parsing error that occurred while identifying line kinds from a Python
     /// source.
     IdentifyLines(IdentifyLinesError),
+    /// An error that occurred while reconstructing context for parsed Python source.
     Recontextualize(RecontextualizeError),
+    /// An error that occurred while transpiling the Python AST into Rust. This line could not be
+    /// transpiled.
+    Transpile {
+        line: String,
+        line_no: usize,
+        reason: TranspileError,
+    },
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients

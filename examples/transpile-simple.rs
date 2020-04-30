@@ -3,7 +3,7 @@ use sourcefile::SourceFile;
 
 fn main() {
     let source_file = {
-        let filename = "examples/input/simple.py";
+        let filename = "examples/py/simple.py";
         let sf = SourceFile::default();
         sf.add_file(filename).unwrap()
     };
