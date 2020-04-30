@@ -26,8 +26,10 @@
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::io;
 use std::result;
 
+use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
 use rustpython_parser::error::ParseError;
 use rustpython_parser::location::Location;
 
@@ -54,6 +56,17 @@ impl Error {
         *self.0
     }
 
+    /// Returns true if this is an I/O error.
+    ///
+    /// If this is true, the underlying `ErrorKind` is guaranteed to be
+    /// `ErrorKind::Io`.
+    pub fn is_io_error(&self) -> bool {
+        match *self.0 {
+            ErrorKind::Io(_) => true,
+            _ => false,
+        }
+    }
+
     /// Return the location for this error, if one exists.
     ///
     /// This is a convenience function that permits callers to easily access
@@ -66,9 +79,15 @@ impl Error {
 /// The specific type of an error.
 #[derive(Debug)]
 pub enum ErrorKind {
+    /// An I/O error that occurred while reading Python source file.
+    Io(io::Error),
     /// A parsing error that occurred while parsing a string into a Python AST
     /// with RustPython.
     Parse(ParseError),
+    /// A parsing error that occurred while identifying line kinds from a Python
+    /// source.
+    IdentifyLines(IdentifyLinesError),
+    Recontextualize(RecontextualizeError),
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
@@ -88,6 +107,12 @@ impl ErrorKind {
             ErrorKind::Parse(ref err) => Some(&err.location),
             _ => None,
         }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::new(ErrorKind::Io(err))
     }
 }
 

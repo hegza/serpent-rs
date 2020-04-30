@@ -1,67 +1,43 @@
+//! Transpiles Python source code into Rust source code. Opinionated transforms are kept to a minimum.
+mod error;
 mod transpile;
 
-use derive_deref::Deref;
-use parser::parse_program;
-use quote::ToTokens;
-use rustpython_parser::ast::*;
-use rustpython_parser::parser;
-use syn;
+pub use crate::error::{Error, ErrorKind, Result};
 
-/// Transpiles given Python source code to Rust
-pub fn transpile(python_source: &str) -> String {
-    // Parse Python into a program described by an AST
-    let py_program =
-        parse_program(python_source).expect("source string cannot be made into a Python AST.");
-
-    // Map Python into Rust, statement by statement
-    let rs_statements: Vec<RsStmt> = py_program
-        .statements
-        .into_iter()
-        .map(|py_stmt| py_stmt.into())
-        .collect();
-
-    // Format Rust statements
-    let formatted = rs_statements
-        .iter()
-        .map(|stmt| {
-            let tokens = stmt.to_token_stream();
-
-            // HACK: Create a mock 'main' item to get rustfmt to accept it
-            let mock_source = "fn mock() {".to_owned() + &tokens.to_string() + "}";
-
-            // Format using rustfmt
-            let (_, file_map, _) = rustfmt::format_input::<Vec<u8>>(
-                rustfmt::Input::Text(mock_source),
-                &rustfmt::config::Config::default(),
-                None,
-            )
-            .unwrap();
-
-            let output = &file_map.first().unwrap().1;
-            let output_str = output.chars().map(|(c, _)| c).collect::<String>();
-
-            // Take all but the first and last line from the rustfmt output
-            let mut relevant = output_str
-                .lines()
-                .skip(1)
-                .map(|x| x.trim().to_owned())
-                .collect::<Vec<String>>();
-            relevant.pop();
-
-            relevant
-        })
-        .flatten();
-
-    // Catenate statements with newlines and return
-    formatted.fold(String::new(), |acc, next| acc + &next + "\n")
+/// A string representing a piece of Python source code.
+pub enum PySource<'a> {
+    Program(&'a str, ProgramKind),
 }
 
-#[derive(Clone, Deref)]
-struct RsStmt(pub syn::Stmt);
+/// Represents if the Python program should be interpreted as runnable or as non-runnable (like
+/// a library).
+pub enum ProgramKind {
+    /// Interpret the program as something runnable. Causes an "fn main()" entry point to be
+    /// generated in Rust source code.
+    Runnable,
+    /// Interpret the program as not-runnable. Causes freestanding statements to be interpreted as
+    /// const declarations.
+    NonRunnable,
+}
 
-impl From<Statement> for RsStmt {
-    fn from(py_stmt: Statement) -> Self {
-        let rs_stmt = transpile::visit_statement(py_stmt);
-        RsStmt(rs_stmt)
-    }
+/// Transpiles given Python source to Rust.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```no_run
+/// use std::fs;
+/// use serpent::{transpile, PySource, ProgramKind};
+///
+/// # fn foo() -> serpent::Result<String> {
+///     let source = fs::read_to_string("__init__.py")?;
+///
+///     let result = transpile(PySource::Program(&source, ProgramKind::Runnable))?;
+///     println!("Result:\n{}", &result);
+/// # Ok(result)
+/// # }
+/// ```
+pub fn transpile(src: PySource) -> Result<String> {
+    transpile::transpile_python(src)
 }

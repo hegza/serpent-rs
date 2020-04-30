@@ -1,12 +1,135 @@
+///! Module with transpiler components. Allows transpiling Python source code to Rust source code.
+pub(crate) mod identify_lines;
+pub(crate) mod recontextualize;
+
+use super::*;
+use crate::error::Result;
 use derive_deref::Deref;
 use log::{debug, trace};
 use num_bigint::BigInt;
+use quote::ToTokens;
+use recontextualize::recontextualize;
 use rustpython_parser::ast::*;
-use syn as rs_ast;
+use rustpython_parser::parser;
+use syn;
 
-pub fn visit_statement(stmt: Statement) -> rs_ast::Stmt {
-    let _location = stmt.location;
-    let stmt = stmt.node;
+/// Transpiles given Python source code to Rust
+pub fn transpile_python(src: PySource) -> Result<String> {
+    let generator = match src {
+        PySource::Program(s, ProgramKind::Runnable) => {
+            // Parse source into a program using RustPython
+            let program = parser::parse_program(s)?;
+
+            // Add back unsupported context like comments
+            let py_lines = recontextualize(s, program)?;
+
+            RsGenerator {
+                py_program: py_lines,
+            }
+        }
+        PySource::Program(_s, ProgramKind::NonRunnable) => {
+            // TODO: interpret freestanding Python statements as const declarations
+            unimplemented!()
+        }
+    };
+
+    generator.generate()
+}
+
+/// Represents what's required to generate a Rust program from Python source.
+///
+/// Call .generate() to produce a program.
+struct RsGenerator {
+    /// The original Python program parsed as a vector of nodes, containing single or multiline
+    /// statements and unknown entries (whitespace, comments, other). Contains location as context
+    /// for each entry.
+    py_program: Vec<PyNode>,
+}
+
+/// Anything and everything required to create an expression in Rust. Has a close match to "a line"
+/// in Python, but might span multiple lines, or contain other relevant contextual information.
+pub(crate) enum PyNode {
+    Statement(Located<StatementType>),
+    Newline(Located<()>),
+    Comment(Located<String>),
+}
+
+impl From<Located<StatementType>> for PyNode {
+    fn from(stmt: Located<StatementType>) -> Self {
+        PyNode::Statement(stmt)
+    }
+}
+
+enum RsNode {
+    Statement(syn::Stmt),
+}
+
+impl RsGenerator {
+    fn generate(&self) -> Result<String> {
+        let mut rs_nodes = vec![];
+
+        for node in &self.py_program {
+            let rs_node = match node {
+                PyNode::Statement(stmt) => RsNode::Statement(visit_statement(&stmt)),
+                _ => unimplemented!(),
+            };
+            rs_nodes.push(rs_node);
+        }
+
+        // Format Rust statements
+        let formatted = rs_nodes
+            .iter()
+            .map(|node| match node {
+                RsNode::Statement(stmt) => {
+                    let tokens = stmt.to_token_stream();
+
+                    // HACK: Create a mock 'main' item to get rustfmt to accept it
+                    let mock_source = "fn mock() {".to_owned() + &tokens.to_string() + "}";
+
+                    // Format using rustfmt
+                    let (_, file_map, _) = rustfmt::format_input::<Vec<u8>>(
+                        rustfmt::Input::Text(mock_source),
+                        &rustfmt::config::Config::default(),
+                        None,
+                    )
+                    .unwrap();
+
+                    let output = &file_map.first().unwrap().1;
+                    let output_str = output.chars().map(|(c, _)| c).collect::<String>();
+
+                    // Take all but the first and last line from the rustfmt output
+                    let mut relevant = output_str
+                        .lines()
+                        .skip(1)
+                        .map(|x| x.trim().to_owned())
+                        .collect::<Vec<String>>();
+                    relevant.pop();
+
+                    relevant
+                }
+            })
+            .flatten();
+
+        // Catenate statements with newlines and return
+        let out = formatted.fold(String::new(), |acc, next| acc + &next + "\n");
+
+        Ok(out)
+    }
+}
+
+#[derive(Clone, Deref)]
+struct RsStmt(pub syn::Stmt);
+
+impl From<Statement> for RsStmt {
+    fn from(py_stmt: Statement) -> Self {
+        let rs_stmt = visit_statement(&py_stmt);
+        RsStmt(rs_stmt)
+    }
+}
+
+pub fn visit_statement(stmt: &Statement) -> syn::Stmt {
+    let _location = &stmt.location;
+    let stmt = &stmt.node;
     trace!("visit: {:?}", stmt);
 
     use StatementType::*;
@@ -20,8 +143,15 @@ pub fn visit_statement(stmt: Statement) -> rs_ast::Stmt {
             body,
             decorator_list,
             returns,
-        } => visit_function_def(is_async, name, args, body, decorator_list, returns),
-        Return { value } => syn::Stmt::Expr(visit_return(value)),
+        } => visit_function_def(
+            *is_async,
+            name,
+            args,
+            body,
+            decorator_list,
+            returns.as_ref(),
+        ),
+        Return { value } => syn::Stmt::Expr(visit_return(value.as_ref())),
         _ => {
             println!("unimplemented: {:?}", stmt);
             unimplemented!()
@@ -29,7 +159,7 @@ pub fn visit_statement(stmt: Statement) -> rs_ast::Stmt {
     }
 }
 
-fn visit_return(value: Option<Expression>) -> syn::Expr {
+fn visit_return(value: Option<&Expression>) -> syn::Expr {
     let expr_return = syn::ExprReturn {
         attrs: vec![],
         return_token: <syn::Token![return]>::default(),
@@ -40,11 +170,11 @@ fn visit_return(value: Option<Expression>) -> syn::Expr {
 
 fn visit_function_def(
     _is_async: bool,
-    name: String,
-    args: Box<Parameters>,
-    body: Suite,
-    _decorator_list: Vec<Expression>,
-    _returns: Option<Expression>,
+    name: &str,
+    args: &Box<Parameters>,
+    body: &Suite,
+    _decorator_list: &[Expression],
+    _returns: Option<&Expression>,
 ) -> syn::Stmt {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
@@ -61,7 +191,7 @@ fn visit_function_def(
             where_clause: None,
         },
         paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-        inputs: visit_params(*args),
+        inputs: visit_params(args),
         variadic: None,
         output: syn::ReturnType::Default,
     };
@@ -78,21 +208,21 @@ fn visit_function_def(
     syn::Stmt::Item(item)
 }
 
-fn visit_params(args: Parameters) -> syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> {
+fn visit_params(args: &Parameters) -> syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> {
     // HACK: drop everything but the ordinary parameters for now
-    let args = args.args;
+    let args = &args.args;
 
     let mut list = syn::punctuated::Punctuated::new();
-    for arg in args {
+    for ref arg in args {
         let rust_param = visit_param(arg);
         list.push(rust_param);
     }
     list
 }
 
-fn visit_param(arg: Parameter) -> syn::FnArg {
-    let _location = arg.location;
-    let id_pat = Pat::from(arg.arg).0;
+fn visit_param(arg: &Parameter) -> syn::FnArg {
+    let _location = &arg.location;
+    let id_pat = Pat::from(&arg.arg).0;
     let pat = syn::PatType {
         attrs: vec![],
         pat: Box::new(id_pat),
@@ -125,8 +255,11 @@ where
 #[derive(Deref)]
 struct Pat(syn::Pat);
 
-impl From<String> for Pat {
-    fn from(s: String) -> Self {
+impl<S> From<S> for Pat
+where
+    S: AsRef<str>,
+{
+    fn from(s: S) -> Self {
         Pat(syn::Pat::Ident(syn::PatIdent {
             attrs: vec![],
             by_ref: None,
@@ -137,10 +270,10 @@ impl From<String> for Pat {
     }
 }
 
-fn visit_body(body: Suite) -> syn::Block {
+fn visit_body(body: &Suite) -> syn::Block {
     let stmts = body
         .into_iter()
-        .map(|py_stmt| visit_statement(py_stmt))
+        .map(|py_stmt| visit_statement(&py_stmt))
         .collect::<Vec<syn::Stmt>>();
     syn::Block {
         brace_token: syn::token::Brace(proc_macro2::Span::call_site()),
@@ -148,7 +281,7 @@ fn visit_body(body: Suite) -> syn::Block {
     }
 }
 
-fn visit_assign(targets: &[Expression], value: &Expression) -> rs_ast::Stmt {
+fn visit_assign(targets: &[Expression], value: &Expression) -> syn::Stmt {
     trace!("visit: Assign({:?}, {:?})", targets, value);
     let lhs_target = if targets.len() == 1 {
         let target = targets.first().unwrap();
@@ -162,7 +295,7 @@ fn visit_assign(targets: &[Expression], value: &Expression) -> rs_ast::Stmt {
         };
 
         // Binding identifier pattern
-        rs_ast::Pat::Ident(rs_ast::PatIdent {
+        syn::Pat::Ident(syn::PatIdent {
             attrs: Vec::new(),
             by_ref: None,
             mutability: None,
@@ -172,29 +305,29 @@ fn visit_assign(targets: &[Expression], value: &Expression) -> rs_ast::Stmt {
     } else {
         unimplemented!()
     };
-    rs_ast::Pat::Wild(syn::PatWild {
+    syn::Pat::Wild(syn::PatWild {
         attrs: Vec::new(),
-        underscore_token: <rs_ast::Token![_]>::default(),
+        underscore_token: <syn::Token![_]>::default(),
     });
 
     // TODO: Python 'assign' could be a Local or an assignment expression in Rust
     // HACK: Used Local for now
-    let local = rs_ast::Local {
+    let local = syn::Local {
         attrs: Vec::new(),
-        let_token: <rs_ast::Token![let]>::default(),
+        let_token: <syn::Token![let]>::default(),
         pat: lhs_target,
         init: Some((
-            <rs_ast::Token![=]>::default(),
+            <syn::Token![=]>::default(),
             Box::new(visit_expression(value)),
         )),
-        semi_token: <rs_ast::Token![;]>::default(),
+        semi_token: <syn::Token![;]>::default(),
     };
-    let local = rs_ast::Stmt::Local(local);
+    let local = syn::Stmt::Local(local);
     debug!("Assign({:?}, {:?}) -> {:?}", &targets, &value, &local);
     local
 }
 
-fn visit_expression(expr: &Expression) -> rs_ast::Expr {
+fn visit_expression(expr: &Expression) -> syn::Expr {
     trace!("visit: {:?}", expr);
     let _location = &expr.location;
     let expr = &expr.node;
@@ -261,7 +394,7 @@ fn visit_bin_op(op: &Operator) -> syn::BinOp {
     }
 }
 
-fn visit_number(number: &Number) -> rs_ast::Expr {
+fn visit_number(number: &Number) -> syn::Expr {
     trace!("visit: {:?}", number);
     use Number::*;
     let rs_number = match number {
@@ -272,7 +405,7 @@ fn visit_number(number: &Number) -> rs_ast::Expr {
     rs_number
 }
 
-fn visit_bigint(bigint: &BigInt) -> rs_ast::Expr {
+fn visit_bigint(bigint: &BigInt) -> syn::Expr {
     trace!("visit: {:?}", bigint);
     let (sign, data) = bigint.to_u32_digits();
     let value: u32 = {
@@ -285,9 +418,9 @@ fn visit_bigint(bigint: &BigInt) -> rs_ast::Expr {
     let expr = match sign {
         num_bigint::Sign::Plus => {
             let literal = proc_macro2::Literal::u32_unsuffixed(value);
-            rs_ast::Expr::Lit(rs_ast::ExprLit {
+            syn::Expr::Lit(syn::ExprLit {
                 attrs: Vec::new(),
-                lit: rs_ast::Lit::new(literal),
+                lit: syn::Lit::new(literal),
             })
         }
         _ => unimplemented!(),

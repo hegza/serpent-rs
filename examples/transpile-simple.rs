@@ -1,4 +1,4 @@
-use serpent::transpile;
+use serpent::{transpile, ProgramKind, PySource};
 use sourcefile::SourceFile;
 
 fn main() {
@@ -10,6 +10,6 @@ fn main() {
     let source = source_file.contents;
 
     println!("Source:\n{}", &source);
-    let result = transpile(&source);
-    println!("Result:\n{}", &result);
+    let result = transpile(PySource::Program(&source, ProgramKind::Runnable));
+    println!("Result:\n{}", &result.unwrap());
 }
