@@ -1,5 +1,5 @@
-//! Error boilerplate and documentation adapted from great [implementation](https://github.com/BurntSushi/rust-csv/blob/master/src/error.rs) by Andrew Gallant
-//! (BurntSushi). Visited 3.4.2020. License of original source is reproduced below, though separate
+//! Error boilerplate and documentation adapted from the great [implementation](https://github.com/BurntSushi/rust-csv/blob/master/src/error.rs) by Andrew Gallant
+//! (BurntSushi). Visited 30.4.2020. License of original source is reproduced below, though separate
 //! from the licensing of the `serpent` library.
 //!
 //! The MIT License (MIT)
