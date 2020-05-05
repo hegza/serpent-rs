@@ -1,4 +1,4 @@
-///! Module with transpiler components. Allows transpiling Python source code to Rust source code.
+//! Module with transpiler components. Allows transpiling Python source code to Rust source code.
 pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
 
