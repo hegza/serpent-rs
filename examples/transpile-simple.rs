@@ -33,6 +33,8 @@ impl<'s> fmt::Display for SourceView<'s> {
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let source_file = {
         let filename = "examples/py/simple.py";
         let sf = SourceFile::default();
