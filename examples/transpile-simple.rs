@@ -44,6 +44,6 @@ fn main() {
 
     println!("Source:\n{}", &source);
     let result = transpile(PySource::Program(&source.0, ProgramKind::Runnable)).unwrap();
-    let view = SourceView(&result, Language::Rust, true);
+    let view = SourceView(&result, Language::Rust, false);
     println!("Result:\n{}", &view);
 }
