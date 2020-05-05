@@ -1,6 +1,7 @@
 //! Module with transpiler components. Allows transpiling Python source code to Rust source code.
 pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
+pub(crate) mod visit;
 
 use super::*;
 use derive_deref::Deref;
@@ -8,11 +9,12 @@ use log::{debug, trace};
 use num_bigint::BigInt;
 use quote::ToTokens;
 use recontextualize::recontextualize;
-use rustpython_parser::ast::*;
+use rustpython_parser::ast;
 use rustpython_parser::parser;
 use std::convert::TryFrom;
 use std::{fmt, result};
 use syn;
+use visit::*;
 
 /// A type alias for `Result<T, serpent::TranspileError>`.
 pub type Result<T> = result::Result<T, TranspileError>;
@@ -45,18 +47,15 @@ pub enum TranspileError {
     /// An error that occurred while transpiling the Python AST into Rust. A transform for this
     /// Python AST node was not implemented.
     Unimplemented {
-        node: Box<dyn fmt::Debug>,
-        location: Option<Location>,
+        node: String,
+        location: Option<ast::Location>,
     },
 }
 
 impl TranspileError {
-    fn unimplemented<D: 'static>(node: &D, location: Option<Location>) -> TranspileError
-    where
-        D: Clone + fmt::Debug,
-    {
+    fn unimplemented<D: fmt::Debug>(node: &D, location: Option<ast::Location>) -> TranspileError {
         TranspileError::Unimplemented {
-            node: Box::new(node.clone()),
+            node: format!("{:?}", node),
             location,
         }
     }
@@ -87,13 +86,13 @@ struct RsGenerator {
 /// Anything and everything required to create an expression in Rust. Has a close match to "a line"
 /// in Python, but might span multiple lines, or contain other relevant contextual information.
 pub(crate) enum PyNode {
-    Statement(Located<StatementType>),
-    Newline(Located<()>),
-    Comment(Located<String>),
+    Statement(ast::Located<ast::StatementType>),
+    Newline(ast::Located<()>),
+    Comment(ast::Located<String>),
 }
 
-impl From<Located<StatementType>> for PyNode {
-    fn from(stmt: Located<StatementType>) -> Self {
+impl From<ast::Located<ast::StatementType>> for PyNode {
+    fn from(stmt: ast::Located<ast::StatementType>) -> Self {
         PyNode::Statement(stmt)
     }
 }
@@ -167,26 +166,26 @@ impl RsGenerator {
 #[derive(Clone, Deref)]
 struct RsStmt(pub syn::Stmt);
 
-impl TryFrom<Statement> for RsStmt {
+impl TryFrom<ast::Statement> for RsStmt {
     type Error = TranspileError;
 
-    fn try_from(py_stmt: Statement) -> Result<Self> {
+    fn try_from(py_stmt: ast::Statement) -> Result<Self> {
         let rs_stmt = visit_statement(&py_stmt)?;
         Ok(RsStmt(rs_stmt))
     }
 }
 
-pub fn visit_statement(stmt: &Statement) -> Result<syn::Stmt> {
+pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
     let _location = &stmt.location;
     let stmt = &stmt.node;
     trace!("visit: {:?}", stmt);
 
     match stmt {
-        StatementType::Assign { targets, value } => visit_assign(&targets, &value),
-        StatementType::Expression { expression } => {
-            Ok(syn::Stmt::Expr(visit_expression(&expression)?))
+        ast::StatementType::Assign { targets, value } => visit_assign(&targets, &value),
+        ast::StatementType::Expression { expression } => {
+            Ok(syn::Stmt::Expr(Expression(&expression).visit()?))
         }
-        StatementType::FunctionDef {
+        ast::StatementType::FunctionDef {
             is_async,
             name,
             args,
@@ -201,13 +200,13 @@ pub fn visit_statement(stmt: &Statement) -> Result<syn::Stmt> {
             decorator_list,
             returns.as_ref(),
         ),
-        StatementType::Return { value } => Ok(syn::Stmt::Expr(visit_return(value.as_ref())?)),
+        ast::StatementType::Return { value } => Ok(syn::Stmt::Expr(visit_return(value.as_ref())?)),
         _stmt => unimplemented!(),
     }
 }
 
-fn visit_return(value: Option<&Expression>) -> Result<syn::Expr> {
-    let expr = value.and(Some(Box::new(visit_expression(&value.unwrap())?)));
+fn visit_return(value: Option<&ast::Expression>) -> Result<syn::Expr> {
+    let expr = value.and(Some(Box::new(Expression(&value.unwrap()).visit()?)));
     let expr_return = syn::ExprReturn {
         attrs: vec![],
         return_token: <syn::Token![return]>::default(),
@@ -219,10 +218,10 @@ fn visit_return(value: Option<&Expression>) -> Result<syn::Expr> {
 fn visit_function_def(
     _is_async: bool,
     name: &str,
-    args: &Box<Parameters>,
-    body: &Suite,
-    _decorator_list: &[Expression],
-    _returns: Option<&Expression>,
+    args: &Box<ast::Parameters>,
+    body: &ast::Suite,
+    _decorator_list: &[ast::Expression],
+    _returns: Option<&ast::Expression>,
 ) -> Result<syn::Stmt> {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
@@ -239,7 +238,7 @@ fn visit_function_def(
             where_clause: None,
         },
         paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-        inputs: visit_params(args),
+        inputs: visit_params(args)?,
         variadic: None,
         output: syn::ReturnType::Default,
     };
@@ -256,69 +255,21 @@ fn visit_function_def(
     Ok(syn::Stmt::Item(item))
 }
 
-fn visit_params(args: &Parameters) -> syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> {
+fn visit_params(
+    args: &ast::Parameters,
+) -> Result<syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma>> {
     // HACK: drop everything but the ordinary parameters for now
     let args = &args.args;
 
     let mut list = syn::punctuated::Punctuated::new();
     for ref arg in args {
-        let rust_param = visit_param(arg);
+        let rust_param = Parameter(&arg).visit()?;
         list.push(rust_param);
     }
-    list
+    Ok(list)
 }
 
-fn visit_param(arg: &Parameter) -> syn::FnArg {
-    let _location = &arg.location;
-    let id_pat = Pat::from(&arg.arg).0;
-    let pat = syn::PatType {
-        attrs: vec![],
-        pat: Box::new(id_pat),
-        colon_token: <syn::Token![:]>::default(),
-        ty: Box::new(syn::Type::Path(syn::TypePath {
-            qself: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments: syn::punctuated::Punctuated::new(),
-            },
-        })),
-    };
-    syn::FnArg::Typed(pat)
-}
-
-// Use newtype-pattern to add operations
-#[derive(Deref)]
-struct Ident(syn::Ident);
-
-impl<S> From<S> for Ident
-where
-    S: AsRef<str>,
-{
-    fn from(s: S) -> Self {
-        let s = s.as_ref();
-        Ident(syn::Ident::new(s, proc_macro2::Span::call_site()))
-    }
-}
-
-#[derive(Deref)]
-struct Pat(syn::Pat);
-
-impl<S> From<S> for Pat
-where
-    S: AsRef<str>,
-{
-    fn from(s: S) -> Self {
-        Pat(syn::Pat::Ident(syn::PatIdent {
-            attrs: vec![],
-            by_ref: None,
-            mutability: None,
-            ident: Ident::from(s).0,
-            subpat: None,
-        }))
-    }
-}
-
-fn visit_body(body: &Suite) -> Result<syn::Block> {
+fn visit_body(body: &ast::Suite) -> Result<syn::Block> {
     let stmts = body
         .into_iter()
         .map(|py_stmt| visit_statement(&py_stmt))
@@ -329,14 +280,14 @@ fn visit_body(body: &Suite) -> Result<syn::Block> {
     })
 }
 
-fn visit_assign(targets: &[Expression], value: &Expression) -> Result<syn::Stmt> {
+fn visit_assign(targets: &[ast::Expression], value: &ast::Expression) -> Result<syn::Stmt> {
     trace!("visit: Assign({:?}, {:?})", targets, value);
     let lhs_target = if targets.len() == 1 {
         let target = targets.first().unwrap();
         let _location = &target.location;
         let expr = &target.node;
         let ident = match expr {
-            ExpressionType::Identifier { name } => {
+            ast::ExpressionType::Identifier { name } => {
                 proc_macro2::Ident::new(name, proc_macro2::Span::call_site())
             }
             _ => unimplemented!(),
@@ -366,7 +317,7 @@ fn visit_assign(targets: &[Expression], value: &Expression) -> Result<syn::Stmt>
         pat: lhs_target,
         init: Some((
             <syn::Token![=]>::default(),
-            Box::new(visit_expression(value)?),
+            Box::new(Expression(value).visit()?),
         )),
         semi_token: <syn::Token![;]>::default(),
     };
@@ -375,78 +326,22 @@ fn visit_assign(targets: &[Expression], value: &Expression) -> Result<syn::Stmt>
     Ok(local)
 }
 
-fn visit_expression(expr: &Expression) -> Result<syn::Expr> {
-    trace!("visit: {:?}", expr);
-    let location = &expr.location;
-    let expr = &expr.node;
-
-    let rs_expr = match expr {
-        ExpressionType::Number { value } => visit_number(&value)?,
-        ExpressionType::Binop { a, op, b } => visit_binop(a, op, b)?,
-        ExpressionType::Identifier { name } => syn::Expr::Path(syn::ExprPath {
-            attrs: vec![],
-            qself: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments: {
-                    let mut segs = syn::punctuated::Punctuated::new();
-                    segs.push(syn::PathSegment {
-                        ident: Ident::from(name).0,
-                        arguments: syn::PathArguments::None,
-                    });
-                    segs
-                },
-            },
-        }),
-        ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
-            attrs: vec![],
-            func: Box::new(visit_expression(&*function)?),
-            paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-            args: visit_args(args)?,
-        }),
-        _ => {
-            println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
-            unimplemented!()
-        }
-    };
-    debug!("{:?} -> {:?}", &expr, &rs_expr);
-    Ok(rs_expr)
-}
+// TODO: some visit with multiple possible outputs
 
 fn visit_args(
-    args: &[Expression],
+    args: &[ast::Expression],
 ) -> Result<syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
     let mut list = syn::punctuated::Punctuated::new();
     for arg in args {
-        let rust_arg = visit_expression(&arg)?;
+        let rust_arg = Expression(&arg).visit()?;
         list.push(rust_arg);
     }
     Ok(list)
 }
 
-fn visit_binop(a: &Box<Expression>, op: &Operator, b: &Box<Expression>) -> Result<syn::Expr> {
-    let bin_expr = syn::ExprBinary {
-        attrs: vec![],
-        left: Box::new(visit_expression(&a)?),
-        op: visit_bin_op(op),
-        right: Box::new(visit_expression(&b)?),
-    };
-    Ok(syn::Expr::Binary(bin_expr))
-}
-
-fn visit_bin_op(op: &Operator) -> syn::BinOp {
-    match op {
-        Operator::Add => syn::BinOp::Add(<syn::Token![+]>::default()),
-        _ => {
-            println!("unimplemented: {:?}", op);
-            unimplemented!()
-        }
-    }
-}
-
-fn visit_number(number: &Number) -> Result<syn::Expr> {
+fn visit_number(number: &ast::Number) -> Result<syn::Expr> {
     trace!("visit: {:?}", number);
-    use Number::*;
+    use ast::Number::*;
     let rs_number = match number {
         Integer { value } => visit_bigint(&value)?,
         _ => unimplemented!(),
@@ -477,4 +372,37 @@ fn visit_bigint(bigint: &BigInt) -> Result<syn::Expr> {
     };
     debug!("{:?} -> {:?}", bigint, expr);
     Ok(expr)
+}
+
+// Use newtype-pattern to add From<str>
+#[derive(Deref)]
+struct Ident(syn::Ident);
+
+impl<S> From<S> for Ident
+where
+    S: AsRef<str>,
+{
+    fn from(s: S) -> Self {
+        let s = s.as_ref();
+        Ident(syn::Ident::new(s, proc_macro2::Span::call_site()))
+    }
+}
+
+// Use newtype-pattern to add From<str>
+#[derive(Deref)]
+struct Pat(syn::Pat);
+
+impl<S> From<S> for Pat
+where
+    S: AsRef<str>,
+{
+    fn from(s: S) -> Self {
+        Pat(syn::Pat::Ident(syn::PatIdent {
+            attrs: vec![],
+            by_ref: None,
+            mutability: None,
+            ident: Ident::from(s).0,
+            subpat: None,
+        }))
+    }
 }
