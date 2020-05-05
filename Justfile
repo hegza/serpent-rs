@@ -2,9 +2,9 @@ build:
     cargo build
 
 test:
+    cargo test
+
+try:
     cargo run --example transpile-simple
 
-test-minimal:
-    cargo run --example transpile-local
-
-alias run := test
+alias run := try
