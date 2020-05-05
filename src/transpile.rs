@@ -44,16 +44,20 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
 pub enum TranspileError {
     /// An error that occurred while transpiling the Python AST into Rust. A transform for this
     /// Python AST node was not implemented.
-    Unimplemented { node: Box<dyn fmt::Debug> },
+    Unimplemented {
+        node: Box<dyn fmt::Debug>,
+        location: Option<Location>,
+    },
 }
 
 impl TranspileError {
-    fn unimplemented<D: 'static>(node: &D) -> TranspileError
+    fn unimplemented<D: 'static>(node: &D, location: Option<Location>) -> TranspileError
     where
         D: Clone + fmt::Debug,
     {
         TranspileError::Unimplemented {
             node: Box::new(node.clone()),
+            location,
         }
     }
 }
@@ -61,7 +65,11 @@ impl TranspileError {
 impl fmt::Display for TranspileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TranspileError::Unimplemented { node } => write!(f, "Unimplemented node: {:?}", node),
+            TranspileError::Unimplemented { node, location } => match location {
+                // TODO: format location with {} / fmt::Display
+                Some(loc) => write!(f, "Unimplemented node: {:?} at {:?}", node, loc),
+                None => write!(f, "Unimplemented node: {:?}", node),
+            },
         }
     }
 }
@@ -465,7 +473,7 @@ fn visit_bigint(bigint: &BigInt) -> Result<syn::Expr> {
                 lit: syn::Lit::new(literal),
             })
         }
-        _ => return Err(TranspileError::unimplemented(bigint)),
+        _ => return Err(TranspileError::unimplemented(bigint, None)),
     };
     debug!("{:?} -> {:?}", bigint, expr);
     Ok(expr)
