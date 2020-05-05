@@ -5,15 +5,16 @@ use rustpython_parser::ast::*;
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Annotates the program with line kinds, returning fully contextualized nodes that can be used to
-/// generate Rust.
+/// Annotates the program with line kinds, returning contextualized nodes that can be used to
+/// generate Rust. Nodes don't quite match to lines, eg. a function block is just one node.
 pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode, String)>> {
     let mut nodes = vec![];
 
     let mut parsed_statements = program.statements.into_iter();
 
     let line_kinds = identify_lines(src)?;
-    for (line_no, (ref line_kind, ref line)) in line_kinds.into_iter().enumerate() {
+    let mut line_kinds = line_kinds.into_iter().enumerate().peekable();
+    while let Some((line_no, (ref line_kind, ref line))) = line_kinds.next() {
         match line_kind {
             LineKind::Newline => nodes.push((
                 PyNode::Newline(Located {
@@ -32,8 +33,17 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode
             // If it's the first line of a statement, extract the next statement from the parsed program
             LineKind::Statement(0) => {
                 let stmt = parsed_statements.next();
+                let mut full_line = String::from(line.to_string());
+                while match line_kinds.peek() {
+                    Some(&(_, (LineKind::Statement(x), _))) if x != 0 => true,
+                    _ => false,
+                } {
+                    let line = (line_kinds.next().unwrap().1).1;
+                    full_line.push_str(&line);
+                }
+
                 match stmt {
-                    Some(stmt) => nodes.push((PyNode::Statement(stmt), line.to_string())),
+                    Some(stmt) => nodes.push((PyNode::Statement(stmt), full_line.to_string())),
                     None => {
                         return Err(Error::new(ErrorKind::Recontextualize(
                             RecontextualizeError::ParserDivergence,
@@ -41,8 +51,12 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode
                     }
                 }
             }
-            // Ignore non-first lines related to a statement
-            LineKind::Statement(_) => continue,
+            // Non-first lines should be handled by the above implementation
+            LineKind::Statement(n) => {
+                return Err(Error::new(ErrorKind::Recontextualize(
+                    RecontextualizeError::MultilineNotHandled(line_no, *n),
+                )))
+            }
         }
     }
 
@@ -52,6 +66,8 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode
 #[derive(Debug)]
 pub enum RecontextualizeError {
     ParserDivergence,
+    // Parameters are `source line`, and index of the line of multiline statement
+    MultilineNotHandled(usize, usize),
 }
 
 impl StdError for RecontextualizeError {
@@ -66,6 +82,10 @@ impl fmt::Display for RecontextualizeError {
             RecontextualizeError::ParserDivergence => write!(
                 f,
                 "Parsed source has a different number of statements from what were identified by custom lexer in identify_lines."
+            ),
+            RecontextualizeError::MultilineNotHandled(line_no, idx) => write!(
+                f,
+                "A multiline statement on line {} was not fully captured by an expression that attempted to capture it. Multiline index: {}", line_no, idx
             ),
         }
     }

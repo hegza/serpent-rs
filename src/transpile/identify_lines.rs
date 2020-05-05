@@ -9,7 +9,7 @@ use rustpython_parser::parser::{parse_program, parse_statement};
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Parses a Python source into a list of line-kind identifiers.
+/// Parses a Python source into a list of line-kind identifiers, one for each line.
 pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
     // Verify that source parses
     debug_assert!(parse_program(src).is_ok());
@@ -19,49 +19,45 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
 
     // Go over all lines in the source, and describe the lines in terms of their type
     let mut line_kinds = Vec::with_capacity(line_count);
-    loop {
-        if let Some(line) = lines.next() {
-            let line = line.to_owned();
-            if is_newline(&line) {
-                line_kinds.push((LineKind::Newline, line));
-            } else if is_comment(&line) {
-                line_kinds.push((LineKind::Comment(line.to_owned()), line));
-            }
-            // Identify the line as a statement, if it's not whitespace or a comment
-            else {
-                let mut len_lines = 1;
-                let mut stmt_constituents = vec![line];
-                // Loop, adding a line to the statement candidate each time. The number of iterations until a valid statement can be constructed determines the length of the statement
-                loop {
-                    let aggregate = stmt_constituents
-                        .iter()
-                        .fold(String::new(), |agg, item| agg + item);
+    while let Some(line) = lines.next() {
+        let line = line.to_owned();
+        if is_newline(&line) {
+            line_kinds.push((LineKind::Newline, line));
+        } else if is_comment(&line) {
+            line_kinds.push((LineKind::Comment(line.to_owned()), line));
+        }
+        // Identify the line as a statement, if it's not whitespace or a comment
+        else {
+            let mut len_lines = 1;
+            let mut stmt_constituents = vec![line];
+            // Loop, adding a line to the statement candidate each time. The number of iterations until a valid statement can be constructed determines the length of the statement
+            loop {
+                let aggregate = stmt_constituents
+                    .iter()
+                    .fold(String::new(), |agg, item| agg + item);
 
-                    let stmt = parse_statement(&aggregate);
-                    match stmt {
-                        Ok(_) => break,
-                        Err(_) => {
-                            // Get the next line, returning error if the file ends.
-                            let next = lines.next();
-                            len_lines += 1;
-                            match next {
-                                Some(next) => stmt_constituents.push(next.to_owned()),
-                                None => {
-                                    return Err(Error::new(ErrorKind::IdentifyLines(
-                                        IdentifyLinesError::EofWhileConstructingStatement,
-                                    )))
-                                }
+                let stmt = parse_statement(&aggregate);
+                match stmt {
+                    Ok(_) => break,
+                    Err(_) => {
+                        // Get the next line, returning error if the file ends.
+                        let next = lines.next();
+                        len_lines += 1;
+                        match next {
+                            Some(next) => stmt_constituents.push(next.to_owned()),
+                            None => {
+                                return Err(Error::new(ErrorKind::IdentifyLines(
+                                    IdentifyLinesError::EofWhileConstructingStatement,
+                                )))
                             }
-                            continue;
                         }
+                        continue;
                     }
                 }
-                for n in 0..len_lines {
-                    line_kinds.push((LineKind::Statement(n), stmt_constituents[n].to_string()));
-                }
             }
-        } else {
-            break;
+            for n in 0..len_lines {
+                line_kinds.push((LineKind::Statement(n), stmt_constituents[n].to_string()));
+            }
         }
     }
 

@@ -4,17 +4,19 @@ pub(crate) mod recontextualize;
 pub(crate) mod visit;
 
 use super::*;
+use crate::error::TranspileError;
+use recontextualize::recontextualize;
+use visit::*;
+
 use derive_deref::Deref;
-use log::{debug, trace};
+use log::{debug, info, trace};
 use num_bigint::BigInt;
 use quote::ToTokens;
-use recontextualize::recontextualize;
 use rustpython_parser::ast;
 use rustpython_parser::parser;
 use std::convert::TryFrom;
-use std::{fmt, result};
+use std::result;
 use syn;
-use visit::*;
 
 /// A type alias for `Result<T, serpent::TranspileError>`.
 pub type Result<T> = result::Result<T, TranspileError>;
@@ -24,9 +26,11 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
     let generator = match src {
         PySource::Program(s, ProgramKind::Runnable) => {
             // Parse source into a program using RustPython
+            info!("Parsing Python program...");
             let program = parser::parse_program(s)?;
 
             // Add back unsupported context like comments
+            info!("Recontextualizing Python program...");
             let py_nodes = recontextualize(s, program)?;
 
             RsGenerator {
@@ -39,38 +43,8 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
         }
     };
 
+    info!("Generating Rust source code...");
     generator.generate()
-}
-
-#[derive(Debug)]
-pub enum TranspileError {
-    /// An error that occurred while transpiling the Python AST into Rust. A transform for this
-    /// Python AST node was not implemented.
-    Unimplemented {
-        node: String,
-        location: Option<ast::Location>,
-    },
-}
-
-impl TranspileError {
-    fn unimplemented<D: fmt::Debug>(node: &D, location: Option<ast::Location>) -> TranspileError {
-        TranspileError::Unimplemented {
-            node: format!("{:?}", node),
-            location,
-        }
-    }
-}
-
-impl fmt::Display for TranspileError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TranspileError::Unimplemented { node, location } => match location {
-                // TODO: format location with {} / fmt::Display
-                Some(loc) => write!(f, "Unimplemented node: {:?} at {:?}", node, loc),
-                None => write!(f, "Unimplemented node: {:?}", node),
-            },
-        }
-    }
 }
 
 /// Represents what's required to generate a Rust program from Python source.
@@ -85,6 +59,7 @@ struct RsGenerator {
 
 /// Anything and everything required to create an expression in Rust. Has a close match to "a line"
 /// in Python, but might span multiple lines, or contain other relevant contextual information.
+#[derive(Debug)]
 pub(crate) enum PyNode {
     Statement(ast::Located<ast::StatementType>),
     Newline(ast::Located<()>),
@@ -97,35 +72,42 @@ impl From<ast::Located<ast::StatementType>> for PyNode {
     }
 }
 
+#[derive(Debug)]
 enum RsNode {
     Statement(syn::Stmt),
+    Newline,
+    Comment(String),
 }
 
 impl RsGenerator {
     fn generate(&self) -> crate::error::Result<String> {
         // Create a Rust node for each Python node
         let mut rs_nodes = vec![];
-        for (line_no, &(ref node, ref chars)) in self.py_program.iter().enumerate() {
+        for (node_no, &(ref node, ref chars)) in self.py_program.iter().enumerate() {
+            info!("Node {}: `{}`", node_no, chars);
             let rs_node = match node {
                 PyNode::Statement(stmt) => match visit_statement(&stmt) {
                     Ok(rs_stmt) => RsNode::Statement(rs_stmt),
                     Err(err) => {
                         return Err(crate::Error::new(ErrorKind::Transpile {
                             line: chars.to_string(),
-                            line_no,
+                            line_no: node_no,
                             reason: err,
                         }))
                     }
                 },
-                _ => unimplemented!(),
+                PyNode::Newline(_located) => RsNode::Newline,
+                PyNode::Comment(ast::Located { node, .. }) => RsNode::Comment(node.clone()),
             };
+            debug!("Node {} -> {:?}", node_no, &rs_node);
             rs_nodes.push(rs_node);
         }
 
-        // Format Rust statements
+        // Format/print Rust statements
         let formatted = rs_nodes
             .iter()
-            .map(|node| match node {
+            .enumerate()
+            .map(|(node_no, node)| match node {
                 RsNode::Statement(stmt) => {
                     let tokens = stmt.to_token_stream();
 
@@ -150,9 +132,12 @@ impl RsGenerator {
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
                     relevant.pop();
+                    info!("Node {} = Stmt::{:?} -> {:?}", node_no, stmt, &relevant);
 
                     relevant
                 }
+                RsNode::Newline => vec!["".to_owned()],
+                RsNode::Comment(s) => vec![format!("// {}", s)],
             })
             .flatten();
 
@@ -175,6 +160,10 @@ impl TryFrom<ast::Statement> for RsStmt {
     }
 }
 
+/// Returns the Rust AST node.
+///
+/// Note that if the parameter is an expression statement, a `Stmt::Semi` is returned instead of an
+/// `Stmt::Expr`. This is the correct functionality.
 pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
     let _location = &stmt.location;
     let stmt = &stmt.node;
@@ -182,9 +171,10 @@ pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
 
     match stmt {
         ast::StatementType::Assign { targets, value } => visit_assign(&targets, &value),
-        ast::StatementType::Expression { expression } => {
-            Ok(syn::Stmt::Expr(Expression(&expression).visit()?))
-        }
+        ast::StatementType::Expression { expression } => Ok(syn::Stmt::Semi(
+            Expression(&expression).visit()?,
+            <syn::Token![;]>::default(),
+        )),
         ast::StatementType::FunctionDef {
             is_async,
             name,
@@ -200,7 +190,10 @@ pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
             decorator_list,
             returns.as_ref(),
         ),
-        ast::StatementType::Return { value } => Ok(syn::Stmt::Expr(visit_return(value.as_ref())?)),
+        ast::StatementType::Return { value } => Ok(syn::Stmt::Semi(
+            visit_return(value.as_ref())?,
+            <syn::Token![;]>::default(),
+        )),
         _stmt => unimplemented!(),
     }
 }
@@ -269,6 +262,7 @@ fn visit_params(
     Ok(list)
 }
 
+// TODO: add indentation information somehow
 fn visit_body(body: &ast::Suite) -> Result<syn::Block> {
     let stmts = body
         .into_iter()
@@ -325,8 +319,6 @@ fn visit_assign(targets: &[ast::Expression], value: &ast::Expression) -> Result<
     debug!("Assign({:?}, {:?}) -> {:?}", &targets, &value, &local);
     Ok(local)
 }
-
-// TODO: some visit with multiple possible outputs
 
 fn visit_args(
     args: &[ast::Expression],

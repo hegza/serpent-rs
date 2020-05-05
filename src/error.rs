@@ -29,9 +29,7 @@ use std::fmt;
 use std::io;
 use std::result;
 
-use crate::transpile::{
-    identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError, TranspileError,
-};
+use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
 use rustpython_parser::error::ParseError;
 use rustpython_parser::location::Location;
 
@@ -146,6 +144,37 @@ impl fmt::Display for Error {
         match *self.0 {
             ErrorKind::Parse(ref err) => write!(f, "Python parse error: {}", err),
             _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum TranspileError {
+    /// An error that occurred while transpiling the Python AST into Rust. A transform for this
+    /// Python AST node was not implemented.
+    Unimplemented {
+        node: String,
+        location: Option<Location>,
+    },
+}
+
+impl TranspileError {
+    pub fn unimplemented<D: fmt::Debug>(node: &D, location: Option<Location>) -> TranspileError {
+        TranspileError::Unimplemented {
+            node: format!("{:?}", node),
+            location,
+        }
+    }
+}
+
+impl fmt::Display for TranspileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TranspileError::Unimplemented { node, location } => match location {
+                // TODO: format location with {} / fmt::Display
+                Some(loc) => write!(f, "Unimplemented node: {:?} at {:?}", node, loc),
+                None => write!(f, "Unimplemented node: {:?}", node),
+            },
         }
     }
 }

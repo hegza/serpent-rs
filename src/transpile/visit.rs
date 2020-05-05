@@ -1,6 +1,9 @@
+// TODO: turn Visit create into a macro
+// TODO: turn visit() into a macro
 use super::Result;
 use super::*;
 
+use proc_macro2::Span;
 use rustpython_parser::ast;
 use syn;
 
@@ -52,7 +55,7 @@ impl<'a> Visit for Parameter<'a> {
     type Output = syn::FnArg;
 
     fn visit(&self) -> Result<syn::FnArg> {
-        let loc = &self.0.location;
+        let _loc = &self.0.location;
         let id_pat = Pat::from(&self.0.arg).0;
         let pat = syn::PatType {
             attrs: vec![],
@@ -110,7 +113,7 @@ impl<'a> Visit for Expression<'a> {
                 paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
                 args: visit_args(args)?,
             }),
-            ast::ExpressionType::String { value } => unimplemented!(),
+            ast::ExpressionType::String { value } => StringGroup(value).visit()?,
             _ => {
                 println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
                 unimplemented!()
@@ -121,5 +124,31 @@ impl<'a> Visit for Expression<'a> {
     }
 }
 
-// TODO: turn Visit create into a macro
-// TODO: turn visit() into a macro
+#[derive(Debug)]
+pub struct StringGroup<'a>(pub &'a ast::StringGroup);
+
+impl<'a> Visit for StringGroup<'a> {
+    type Output = syn::Expr;
+
+    fn visit(&self) -> Result<syn::Expr> {
+        Ok(match self.0 {
+            ast::StringGroup::Constant { value } => syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(syn::LitStr::new(value, Span::call_site())),
+            }),
+            ast::StringGroup::FormattedValue {
+                value,
+                conversion,
+                spec,
+            } => {
+                return Err(TranspileError::unimplemented(
+                    &(value, conversion, spec),
+                    None,
+                ))
+            }
+            ast::StringGroup::Joined { values } => {
+                return Err(TranspileError::unimplemented(values, None))
+            }
+        })
+    }
+}
