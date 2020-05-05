@@ -41,3 +41,11 @@ pub enum ProgramKind {
 pub fn transpile(src: PySource) -> Result<String> {
     transpile::transpile_python(src)
 }
+
+// Enable color backtraces in binaries, tests and examples.
+use ctor::ctor;
+
+#[ctor]
+fn init_color_backtrace() {
+    color_backtrace::install();
+}

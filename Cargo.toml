@@ -29,6 +29,8 @@ derive_deref = "^1.1"
 log = "^0.4"
 env_logger = "^0.7"
 rustfmt = "^0.10"
+color-backtrace = "0.3.0"
+ctor = "0.1.14"
 
 [dev-dependencies]
 sourcefile = "^0.1"
