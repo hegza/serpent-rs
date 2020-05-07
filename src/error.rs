@@ -32,6 +32,7 @@ use std::result;
 use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
 use rustpython_parser::error::ParseError;
 use rustpython_parser::location::Location;
+use syn::Error as SynError;
 
 /// A type alias for `Result<T, serpent::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -84,6 +85,8 @@ pub enum ErrorKind {
     /// A parsing error that occurred while parsing a string into a Python AST
     /// with RustPython.
     Parse(ParseError),
+    /// A parsing error that occurred while parsing a string into a Rust AST with syn.
+    ParseRust(SynError),
     /// A parsing error that occurred while identifying line kinds from a Python
     /// source.
     IdentifyLines(IdentifyLinesError),
@@ -127,6 +130,12 @@ impl From<io::Error> for Error {
 impl From<ParseError> for Error {
     fn from(err: ParseError) -> Error {
         Error::new(ErrorKind::Parse(err))
+    }
+}
+
+impl From<SynError> for Error {
+    fn from(err: SynError) -> Error {
+        Error::new(ErrorKind::ParseRust(err))
     }
 }
 
