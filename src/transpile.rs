@@ -1,25 +1,26 @@
 //! Module with transpiler components. Allows transpiling Python source code to
 //! Rust source code.
+pub(crate) mod cursor;
 pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
 pub(crate) mod remap_functions;
 pub(crate) mod visit;
 
+use std::result;
+
 use super::*;
 use crate::error::TranspileError;
-use recontextualize::recontextualize;
-use remap_functions::remap_functions;
-use visit::*;
-
+use cursor::Cursor;
 use derive_deref::Deref;
 use log::{debug, info, trace};
 use num_bigint::BigInt;
 use quote::ToTokens;
+use recontextualize::recontextualize;
+use remap_functions::remap_functions;
 use rustpython_parser::ast;
 use rustpython_parser::parser;
-use std::convert::TryFrom;
-use std::result;
 use syn;
+use visit::*;
 
 /// A type alias for `Result<T, serpent::TranspileError>`.
 pub type Result<T> = result::Result<T, TranspileError>;
@@ -81,11 +82,16 @@ impl RsGenerator {
     /// Converts the Python AST nodes into Rust AST nodes.
     fn translate_ast(&self) -> crate::error::Result<Vec<RsNode>> {
         let mut rs_nodes = vec![];
-        let py_nodes = self.py_program.iter();
-        for (node_no, &PyNode { ref src, ref node }) in py_nodes.enumerate() {
+
+        let mut cursor = Cursor::new(&self.py_program);
+
+        while let Some(node) = cursor.advance() {
+            let node_no = cursor.idx();
+            let src = &node.src;
+            let node = &node.node;
             info!("Node {}: `{}`", node_no, src);
             let rs_node = match node {
-                PyNodeKind::Statement(stmt) => match visit_statement(&stmt) {
+                PyNodeKind::Statement(stmt) => match visit_statement(&stmt, &cursor) {
                     Ok(rs_stmt) => RsNode::Statement(rs_stmt),
                     Err(err) => {
                         return Err(crate::Error::new(ErrorKind::Transpile {
@@ -101,6 +107,7 @@ impl RsGenerator {
             debug!("Node {} -> {:?}", node_no, &rs_node);
             rs_nodes.push(rs_node);
         }
+
         Ok(rs_nodes)
     }
 
@@ -181,6 +188,8 @@ impl PyNode {
     }
 }
 
+impl cursor::Node for PyNode {}
+
 /// Convert a Python AST statement into a `PyNodeKind::Statement`.
 impl From<ast::Located<ast::StatementType>> for PyNodeKind {
     fn from(stmt: ast::Located<ast::StatementType>) -> Self {
@@ -198,20 +207,11 @@ enum RsNode {
 #[derive(Clone, Deref)]
 struct RsStmt(pub syn::Stmt);
 
-impl TryFrom<&ast::Statement> for RsStmt {
-    type Error = TranspileError;
-
-    fn try_from(py_stmt: &ast::Statement) -> Result<Self> {
-        let rs_stmt = visit_statement(py_stmt)?;
-        Ok(RsStmt(rs_stmt))
-    }
-}
-
 /// Converts a Python AST node into a Rust AST node.
 ///
 /// Note that if the parameter is an expression statement, a `Stmt::Semi` is
 /// returned instead of an `Stmt::Expr`. This is the correct functionality.
-pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
+pub(crate) fn visit_statement(stmt: &ast::Statement, cursor: &Cursor<PyNode>) -> Result<syn::Stmt> {
     let _location = &stmt.location;
     let stmt = &stmt.node;
     trace!("visit: {:?}", stmt);
@@ -236,6 +236,7 @@ pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
             body,
             decorator_list,
             returns.as_ref(),
+            cursor,
         ),
         ast::StatementType::Return { value } => Ok(syn::Stmt::Semi(
             visit_return(value.as_ref())?,
@@ -262,6 +263,7 @@ fn visit_function_def(
     body: &ast::Suite,
     _decorator_list: &[ast::Expression],
     _returns: Option<&ast::Expression>,
+    cursor: &Cursor<PyNode>,
 ) -> Result<syn::Stmt> {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
@@ -282,7 +284,7 @@ fn visit_function_def(
         variadic: None,
         output: syn::ReturnType::Default,
     };
-    let block = visit_body(body)?; // { ... }
+    let block = visit_body(body, cursor)?; // { ... }
     let item_fn = syn::ItemFn {
         attrs: vec![],
         vis: syn::Visibility::Public(syn::VisPublic {
@@ -310,10 +312,10 @@ fn visit_params(
 }
 
 // TODO: add indentation information somehow
-fn visit_body(body: &ast::Suite) -> Result<syn::Block> {
+fn visit_body(body: &ast::Suite, cursor: &Cursor<PyNode>) -> Result<syn::Block> {
     let stmts = body
         .into_iter()
-        .map(|py_stmt| visit_statement(&py_stmt))
+        .map(|py_stmt| visit_statement(&py_stmt, cursor))
         .collect::<Result<Vec<syn::Stmt>>>()?;
     Ok(syn::Block {
         brace_token: syn::token::Brace(proc_macro2::Span::call_site()),
