@@ -20,7 +20,8 @@ impl<'s> fmt::Display for SourceView<'s> {
             Language::Rust => "rs",
         };
 
-        if !self.2 {
+        let show_line_numbers = self.2;
+        if !show_line_numbers {
             write!(f, "```{}\n{}\n```)", lang, &self.0)
         } else {
             write!(f, "```{}\n", lang)?;
