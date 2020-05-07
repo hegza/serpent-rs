@@ -80,7 +80,7 @@ impl<'a> Visit for Expression<'a> {
     type Output = syn::Expr;
 
     fn visit(&self) -> Result<syn::Expr> {
-        trace!("visit: {:?}", self);
+        trace!("Expression::visit -> {:?}", self);
         let location = &self.0.location;
         let expr = &self.0.node;
 
@@ -92,21 +92,7 @@ impl<'a> Visit for Expression<'a> {
                 right: b,
             }
             .visit()?,
-            ast::ExpressionType::Identifier { name } => syn::Expr::Path(syn::ExprPath {
-                attrs: vec![],
-                qself: None,
-                path: syn::Path {
-                    leading_colon: None,
-                    segments: {
-                        let mut segs = syn::punctuated::Punctuated::new();
-                        segs.push(syn::PathSegment {
-                            ident: Ident::from(name).0,
-                            arguments: syn::PathArguments::None,
-                        });
-                        segs
-                    },
-                },
-            }),
+            ast::ExpressionType::Identifier { name } => syn::Expr::Path(Path(name).visit()?),
             ast::ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
                 attrs: vec![],
                 func: Box::new(Expression(&*function).visit()?),
@@ -121,6 +107,32 @@ impl<'a> Visit for Expression<'a> {
         };
         debug!("{:?} -> {:?}", &self, &rs_expr);
         Ok(rs_expr)
+    }
+}
+
+pub struct Path<'a>(pub &'a str);
+
+impl<'a> Visit for Path<'a> {
+    type Output = syn::ExprPath;
+
+    fn visit(&self) -> Result<syn::ExprPath> {
+        let name = self.0;
+
+        Ok(syn::ExprPath {
+            attrs: vec![],
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: {
+                    let mut segs = syn::punctuated::Punctuated::new();
+                    segs.push(syn::PathSegment {
+                        ident: Ident::from(name).0,
+                        arguments: syn::PathArguments::None,
+                    });
+                    segs
+                },
+            },
+        })
     }
 }
 

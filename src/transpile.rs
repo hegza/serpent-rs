@@ -2,11 +2,13 @@
 //! Rust source code.
 pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
+pub(crate) mod remap_functions;
 pub(crate) mod visit;
 
 use super::*;
 use crate::error::TranspileError;
 use recontextualize::recontextualize;
+use remap_functions::remap_functions;
 use visit::*;
 
 use derive_deref::Deref;
@@ -65,7 +67,10 @@ impl RsGenerator {
     /// Generates the Rust source code
     pub fn generate(&self) -> crate::error::Result<String> {
         // Create a Rust node for each Python node
-        let rs_nodes = self.translate_ast()?;
+        let mut rs_nodes = self.translate_ast()?;
+
+        // Go over the Rust AST and do function mappings
+        RsGenerator::remap_functions(&mut rs_nodes);
 
         // Generate the Rust source code from the Rust AST nodes
         let rs_src = RsGenerator::codegen(&rs_nodes);
@@ -97,6 +102,16 @@ impl RsGenerator {
             rs_nodes.push(rs_node);
         }
         Ok(rs_nodes)
+    }
+
+    fn remap_functions(nodes: &mut Vec<RsNode>) {
+        for node in nodes {
+            // Pick out statements, no comments or newlines
+            if let RsNode::Statement(stmt) = node {
+                // Recurse through each statement, visiting all method calls, remapping the print statements
+                remap_functions(stmt);
+            };
+        }
     }
 
     /// Generates Rust source code from Rust AST nodes.
@@ -196,7 +211,7 @@ impl TryFrom<&ast::Statement> for RsStmt {
     }
 }
 
-/// Returns the Rust AST node.
+/// Converts a Python AST node into a Rust AST node.
 ///
 /// Note that if the parameter is an expression statement, a `Stmt::Semi` is
 /// returned instead of an `Stmt::Expr`. This is the correct functionality.
