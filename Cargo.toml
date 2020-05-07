@@ -19,7 +19,7 @@ rustpython-parser = { version = "0.1.1" }
 num-bigint = "^0.2"
 
 # Rust AST
-syn = { version = "1.0.17", features = ["full", "clone-impls", "extra-traits"] }
+syn = { version = "1.0.17", features = ["full", "clone-impls", "extra-traits", "printing", "parsing"] }
 # `quote` "^1.0" matching with `syn` "1.0.17"
 quote = "^1.0"
 # `proc-macro2` "^1.0.7" matching with `syn` "1.0.17"
