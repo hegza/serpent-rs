@@ -54,21 +54,34 @@ struct RsGenerator {
     /// The original Python program parsed as a vector of nodes, containing single or multiline
     /// statements and unknown entries (whitespace, comments, other). Contains location as context
     /// for each entry.
-    py_program: Vec<(PyNode, String)>,
+    py_program: Vec<PyNode>,
 }
 
-/// Anything and everything required to create an expression in Rust. Has a close match to "a line"
-/// in Python, but might span multiple lines, or contain other relevant contextual information.
+/// A statement, newline or comment of Python with associated context. Everything that's required
+/// to create an expression in Rust.
 #[derive(Debug)]
-pub(crate) enum PyNode {
+pub(crate) struct PyNode {
+    src: String,
+    node: PyNodeKind,
+}
+
+#[derive(Debug)]
+pub(crate) enum PyNodeKind {
     Statement(ast::Located<ast::StatementType>),
     Newline(ast::Located<()>),
     Comment(ast::Located<String>),
 }
 
-impl From<ast::Located<ast::StatementType>> for PyNode {
+impl PyNode {
+    pub(crate) fn new(src: String, node: PyNodeKind) -> PyNode {
+        PyNode { src, node }
+    }
+}
+
+/// Convert a Python AST statement into a `PyNodeKind::Statement`.
+impl From<ast::Located<ast::StatementType>> for PyNodeKind {
     fn from(stmt: ast::Located<ast::StatementType>) -> Self {
-        PyNode::Statement(stmt)
+        PyNodeKind::Statement(stmt)
     }
 }
 
@@ -83,21 +96,22 @@ impl RsGenerator {
     fn generate(&self) -> crate::error::Result<String> {
         // Create a Rust node for each Python node
         let mut rs_nodes = vec![];
-        for (node_no, &(ref node, ref chars)) in self.py_program.iter().enumerate() {
-            info!("Node {}: `{}`", node_no, chars);
+        let py_nodes = self.py_program.iter();
+        for (node_no, &PyNode { ref src, ref node }) in py_nodes.enumerate() {
+            info!("Node {}: `{}`", node_no, src);
             let rs_node = match node {
-                PyNode::Statement(stmt) => match visit_statement(&stmt) {
+                PyNodeKind::Statement(stmt) => match visit_statement(&stmt) {
                     Ok(rs_stmt) => RsNode::Statement(rs_stmt),
                     Err(err) => {
                         return Err(crate::Error::new(ErrorKind::Transpile {
-                            line: chars.to_string(),
+                            line: src.to_string(),
                             line_no: node_no,
                             reason: err,
                         }))
                     }
                 },
-                PyNode::Newline(_located) => RsNode::Newline,
-                PyNode::Comment(ast::Located { node, .. }) => RsNode::Comment(node.clone()),
+                PyNodeKind::Newline(_located) => RsNode::Newline,
+                PyNodeKind::Comment(ast::Located { node, .. }) => RsNode::Comment(node.clone()),
             };
             debug!("Node {} -> {:?}", node_no, &rs_node);
             rs_nodes.push(rs_node);

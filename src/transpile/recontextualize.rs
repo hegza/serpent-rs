@@ -1,4 +1,4 @@
-use super::PyNode;
+use super::{PyNode, PyNodeKind};
 use crate::error::{Error, ErrorKind, Result};
 use crate::transpile::identify_lines::{identify_lines, LineKind};
 use rustpython_parser::ast::*;
@@ -7,7 +7,7 @@ use std::fmt;
 
 /// Annotates the program with line kinds, returning contextualized nodes that can be used to
 /// generate Rust. Nodes don't quite match to lines, eg. a function block is just one node.
-pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode, String)>> {
+pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>> {
     let mut nodes = vec![];
 
     let mut parsed_statements = program.statements.into_iter();
@@ -16,19 +16,19 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode
     let mut line_kinds = line_kinds.into_iter().enumerate().peekable();
     while let Some((line_no, (ref line_kind, ref line))) = line_kinds.next() {
         match line_kind {
-            LineKind::Newline => nodes.push((
-                PyNode::Newline(Located {
+            LineKind::Newline => nodes.push(PyNode::new(
+                line.to_string(),
+                PyNodeKind::Newline(Located {
                     location: Location::new(line_no, 0),
                     node: (),
                 }),
-                line.to_string(),
             )),
-            LineKind::Comment(s) => nodes.push((
-                PyNode::Comment(Located {
+            LineKind::Comment(s) => nodes.push(PyNode::new(
+                line.to_string(),
+                PyNodeKind::Comment(Located {
                     location: Location::new(line_no, 0),
                     node: s.to_owned(),
                 }),
-                line.to_string(),
             )),
             // If it's the first line of a statement, extract the next statement from the parsed program
             LineKind::Statement(0) => {
@@ -43,7 +43,10 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<(PyNode
                 }
 
                 match stmt {
-                    Some(stmt) => nodes.push((PyNode::Statement(stmt), full_line.to_string())),
+                    Some(stmt) => nodes.push(PyNode::new(
+                        full_line.to_string(),
+                        PyNodeKind::Statement(stmt),
+                    )),
                     None => {
                         return Err(Error::new(ErrorKind::Recontextualize(
                             RecontextualizeError::ParserDivergence,
