@@ -124,27 +124,11 @@ impl RsGenerator {
                 RsNode::Statement(stmt) => {
                     let tokens = stmt.to_token_stream();
 
-                    // HACK: Create a mock 'main' item to get rustfmt to accept it
-                    let mock_source = "fn mock() {".to_owned() + &tokens.to_string() + "}";
-
-                    // Format using rustfmt
-                    let (_, file_map, _) = rustfmt::format_input::<Vec<u8>>(
-                        rustfmt::Input::Text(mock_source),
-                        &rustfmt::config::Config::default(),
-                        None,
-                    )
-                    .unwrap();
-
-                    let output = &file_map.first().unwrap().1;
-                    let output_str = output.chars().map(|(c, _)| c).collect::<String>();
-
-                    // Take all but the first and last line from the rustfmt output
-                    let mut relevant = output_str
+                    let relevant = tokens
+                        .to_string()
                         .lines()
-                        .skip(1)
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
-                    relevant.pop();
                     info!("Node {} = Stmt::{:?} -> {:?}", node_no, stmt, &relevant);
 
                     relevant
@@ -160,7 +144,19 @@ impl RsGenerator {
             .chain(std::iter::once("}".to_owned()));
 
         // Catenate statements with newlines and return
-        with_main.fold(String::new(), |acc, next| acc + &next + "\n")
+        let out = with_main.fold(String::new(), |acc, next| acc + &next + "\n");
+
+        // Format again
+        let (_, file_map, _) = rustfmt::format_input::<Vec<u8>>(
+            rustfmt::Input::Text(out),
+            &rustfmt::config::Config::default(),
+            None,
+        )
+        .unwrap();
+
+        let output = &file_map.first().unwrap().1;
+        let output_str = output.chars().map(|(c, _)| c).collect::<String>();
+        output_str
     }
 }
 
