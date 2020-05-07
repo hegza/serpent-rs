@@ -6,7 +6,7 @@ fn transpile_local() {
 
     let transpiled = transpile(PySource::Program(stmt, ProgramKind::Runnable)).unwrap();
 
-    assert_eq!(transpiled, "fn main() {\nlet a = 5;\n}\n");
+    assert_eq!(transpiled, "fn main() {\n    let a = 5;\n}\n");
 }
 
 #[test]
