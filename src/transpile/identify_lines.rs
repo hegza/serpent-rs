@@ -1,15 +1,17 @@
-//! A minimal lexer to add contextual information from the Python source, not directly supported by
-//! RustPython.
+//! A minimal lexer to add contextual information from the Python source, not
+//! directly supported by RustPython.
 //!
-//! Parses a Python source, contextualizing lines as belonging to a statement, a comment, or
-//! something else. It's kind of hacky, extensions to RustPython might make this redundant.
+//! Parses a Python source, contextualizing lines as belonging to a statement, a
+//! comment, or something else. It's kind of hacky, extensions to RustPython
+//! might make this redundant.
 
 use crate::error::{Error, ErrorKind, Result};
 use rustpython_parser::parser::{parse_program, parse_statement};
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Parses a Python source into a list of line-kind identifiers, one for each line.
+/// Parses a Python source into a list of line-kind identifiers, one for each
+/// line.
 pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
     // Verify that source parses
     debug_assert!(parse_program(src).is_ok());
@@ -17,7 +19,8 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
     let mut lines = src.lines();
     let line_count = lines.clone().count();
 
-    // Go over all lines in the source, and describe the lines in terms of their type
+    // Go over all lines in the source, and describe the lines in terms of their
+    // type
     let mut line_kinds = Vec::with_capacity(line_count);
     while let Some(line) = lines.next() {
         let line = line.to_owned();
@@ -30,7 +33,9 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
         else {
             let mut len_lines = 1;
             let mut stmt_constituents = vec![line];
-            // Loop, adding a line to the statement candidate each time. The number of iterations until a valid statement can be constructed determines the length of the statement
+            // Loop, adding a line to the statement candidate each time. The number of
+            // iterations until a valid statement can be constructed determines the length
+            // of the statement
             loop {
                 let aggregate = stmt_constituents
                     .iter()
@@ -78,10 +83,12 @@ fn is_newline(line: &str) -> bool {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-/// Represents the type of a a single line of Python. This is used to contextualize a Python file.
+/// Represents the type of a a single line of Python. This is used to
+/// contextualize a Python file.
 pub(crate) enum LineKind {
-    /// A line representing a statement. Inner parameter tells whether this is the first, second,
-    /// etc. line of the statement for multiline statements.
+    /// A line representing a statement. Inner parameter tells whether this is
+    /// the first, second, etc. line of the statement for multiline
+    /// statements.
     Statement(usize),
     Comment(String),
     Newline,

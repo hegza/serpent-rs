@@ -1,4 +1,5 @@
-//! Module with transpiler components. Allows transpiling Python source code to Rust source code.
+//! Module with transpiler components. Allows transpiling Python source code to
+//! Rust source code.
 pub(crate) mod identify_lines;
 pub(crate) mod recontextualize;
 pub(crate) mod visit;
@@ -23,7 +24,8 @@ pub type Result<T> = result::Result<T, TranspileError>;
 
 /// Transpiles given Python source code to Rust source code.
 pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
-    // Create a Rust source-code generator by collecting information from the Python source code
+    // Create a Rust source-code generator by collecting information from the Python
+    // source code
     let generator = match src {
         PySource::Program(s, ProgramKind::Runnable) => {
             // Parse source into a program using RustPython
@@ -43,7 +45,8 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
         }
     };
 
-    // Generate the Rust source code with the information collected from the Python source files
+    // Generate the Rust source code with the information collected from the Python
+    // source files
     info!("Generating Rust source code...");
     generator.generate()
 }
@@ -52,9 +55,9 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
 ///
 /// Call .generate() to produce a program.
 struct RsGenerator {
-    /// The original Python program parsed as a vector of nodes, containing single or multiline
-    /// statements and unknown entries (whitespace, comments, other). Contains location as context
-    /// for each entry.
+    /// The original Python program parsed as a vector of nodes, containing
+    /// single or multiline statements and unknown entries (whitespace,
+    /// comments, other). Contains location as context for each entry.
     py_program: Vec<PyNode>,
 }
 
@@ -146,8 +149,8 @@ impl RsGenerator {
     }
 }
 
-/// A statement, newline or comment of Python with associated context. Everything that's required
-/// to create an expression in Rust.
+/// A statement, newline or comment of Python with associated context.
+/// Everything that's required to create an expression in Rust.
 #[derive(Debug)]
 pub(crate) struct PyNode {
     src: String,
@@ -195,8 +198,8 @@ impl TryFrom<&ast::Statement> for RsStmt {
 
 /// Returns the Rust AST node.
 ///
-/// Note that if the parameter is an expression statement, a `Stmt::Semi` is returned instead of an
-/// `Stmt::Expr`. This is the correct functionality.
+/// Note that if the parameter is an expression statement, a `Stmt::Semi` is
+/// returned instead of an `Stmt::Expr`. This is the correct functionality.
 pub fn visit_statement(stmt: &ast::Statement) -> Result<syn::Stmt> {
     let _location = &stmt.location;
     let stmt = &stmt.node;

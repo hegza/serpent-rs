@@ -1,16 +1,16 @@
 //! Error boilerplate and documentation adapted from the great [implementation](https://github.com/BurntSushi/rust-csv/blob/master/src/error.rs) by Andrew Gallant
-//! (BurntSushi). Visited 30.4.2020. License of original source is reproduced below, though separate
-//! from the licensing of the `serpent` library.
+//! (BurntSushi). Visited 30.4.2020. License of original source is reproduced
+//! below, though separate from the licensing of the `serpent` library.
 //!
 //! The MIT License (MIT)
 //!
 //! Copyright (c) 2015 Andrew Gallant
 //!
 //! Permission is hereby granted, free of charge, to any person obtaining a copy
-//! of this software and associated documentation files (the "Software"), to deal
-//! in the Software without restriction, including without limitation the rights
-//! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//! copies of the Software, and to permit persons to whom the Software is
+//! of this software and associated documentation files (the "Software"), to
+//! deal in the Software without restriction, including without limitation the
+//! rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+//! sell copies of the Software, and to permit persons to whom the Software is
 //! furnished to do so, subject to the following conditions:
 //!
 //! The above copyright notice and this permission notice shall be included in
@@ -20,9 +20,9 @@
 //! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 //! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 //! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-//! THE SOFTWARE.
+//! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+//! FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+//! IN THE SOFTWARE.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -85,15 +85,17 @@ pub enum ErrorKind {
     /// A parsing error that occurred while parsing a string into a Python AST
     /// with RustPython.
     Parse(ParseError),
-    /// A parsing error that occurred while parsing a string into a Rust AST with syn.
+    /// A parsing error that occurred while parsing a string into a Rust AST
+    /// with syn.
     ParseRust(SynError),
     /// A parsing error that occurred while identifying line kinds from a Python
     /// source.
     IdentifyLines(IdentifyLinesError),
-    /// An error that occurred while reconstructing context for parsed Python source.
+    /// An error that occurred while reconstructing context for parsed Python
+    /// source.
     Recontextualize(RecontextualizeError),
-    /// An error that occurred while transpiling the Python AST into Rust. This line could not be
-    /// transpiled.
+    /// An error that occurred while transpiling the Python AST into Rust. This
+    /// line could not be transpiled.
     Transpile {
         line: String,
         line_no: usize,
@@ -159,8 +161,8 @@ impl fmt::Display for Error {
 
 #[derive(Debug)]
 pub enum TranspileError {
-    /// An error that occurred while transpiling the Python AST into Rust. A transform for this
-    /// Python AST node was not implemented.
+    /// An error that occurred while transpiling the Python AST into Rust. A
+    /// transform for this Python AST node was not implemented.
     Unimplemented {
         node: String,
         location: Option<Location>,

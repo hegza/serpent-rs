@@ -1,4 +1,5 @@
-//! Transpiles Python source code into Rust source code. Opinionated transforms are kept to a minimum.
+//! Transpiles Python source code into Rust source code. Opinionated transforms
+//! are kept to a minimum.
 mod error;
 mod transpile;
 
@@ -9,14 +10,14 @@ pub enum PySource<'a> {
     Program(&'a str, ProgramKind),
 }
 
-/// Represents if the Python program should be interpreted as runnable or as non-runnable (like
-/// a library).
+/// Represents if the Python program should be interpreted as runnable or as
+/// non-runnable (like a library).
 pub enum ProgramKind {
-    /// Interpret the program as something runnable. Causes an "fn main()" entry point to be
-    /// generated in Rust source code.
+    /// Interpret the program as something runnable. Causes an "fn main()" entry
+    /// point to be generated in Rust source code.
     Runnable,
-    /// Interpret the program as not-runnable. Causes freestanding statements to be interpreted as
-    /// const declarations.
+    /// Interpret the program as not-runnable. Causes freestanding statements to
+    /// be interpreted as const declarations.
     NonRunnable,
 }
 

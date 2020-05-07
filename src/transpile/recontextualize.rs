@@ -5,8 +5,9 @@ use rustpython_parser::ast::*;
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Annotates the program with line kinds, returning contextualized nodes that can be used to
-/// generate Rust. Nodes don't quite match to lines, eg. a function block is just one node.
+/// Annotates the program with line kinds, returning contextualized nodes that
+/// can be used to generate Rust. Nodes don't quite match to lines, eg. a
+/// function block is just one node.
 pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>> {
     let mut nodes = vec![];
 
@@ -30,7 +31,8 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>
                     node: s.to_owned(),
                 }),
             )),
-            // If it's the first line of a statement, extract the next statement from the parsed program
+            // If it's the first line of a statement, extract the next statement from the parsed
+            // program
             LineKind::Statement(0) => {
                 let stmt = parsed_statements.next();
                 let mut full_line = String::from(line.to_string());
