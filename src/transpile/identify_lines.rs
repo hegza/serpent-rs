@@ -148,7 +148,7 @@ print(
             &identify_lines(PYTHON_SOURCE)
                 .unwrap()
                 .into_iter()
-                .map(|(kind, line)| kind)
+                .map(|(kind, _line)| kind)
                 .collect::<Vec<LineKind>>(),
             &PYTHON_SOURCE_IDENTIFIED.to_vec()
         );
@@ -156,7 +156,7 @@ print(
             &identify_lines(PYTHON_SOURCE_2)
                 .unwrap()
                 .into_iter()
-                .map(|(kind, line)| kind)
+                .map(|(kind, _line)| kind)
                 .collect::<Vec<LineKind>>(),
             &PYTHON_SOURCE_2_IDENTIFIED.to_vec()
         );
