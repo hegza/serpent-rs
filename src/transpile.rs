@@ -23,6 +23,7 @@ pub type Result<T> = result::Result<T, TranspileError>;
 
 /// Transpiles given Python source code to Rust source code.
 pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
+    // Create a Rust source-code generator by collecting information from the Python source code
     let generator = match src {
         PySource::Program(s, ProgramKind::Runnable) => {
             // Parse source into a program using RustPython
@@ -32,7 +33,6 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
             // Add back unsupported context like comments
             info!("Recontextualizing Python program...");
             let py_nodes = recontextualize(s, program)?;
-
             RsGenerator {
                 py_program: py_nodes,
             }
@@ -43,6 +43,7 @@ pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
         }
     };
 
+    // Generate the Rust source code with the information collected from the Python source files
     info!("Generating Rust source code...");
     generator.generate()
 }
@@ -57,44 +58,20 @@ struct RsGenerator {
     py_program: Vec<PyNode>,
 }
 
-/// A statement, newline or comment of Python with associated context. Everything that's required
-/// to create an expression in Rust.
-#[derive(Debug)]
-pub(crate) struct PyNode {
-    src: String,
-    node: PyNodeKind,
-}
-
-#[derive(Debug)]
-pub(crate) enum PyNodeKind {
-    Statement(ast::Located<ast::StatementType>),
-    Newline(ast::Located<()>),
-    Comment(ast::Located<String>),
-}
-
-impl PyNode {
-    pub(crate) fn new(src: String, node: PyNodeKind) -> PyNode {
-        PyNode { src, node }
-    }
-}
-
-/// Convert a Python AST statement into a `PyNodeKind::Statement`.
-impl From<ast::Located<ast::StatementType>> for PyNodeKind {
-    fn from(stmt: ast::Located<ast::StatementType>) -> Self {
-        PyNodeKind::Statement(stmt)
-    }
-}
-
-#[derive(Debug)]
-enum RsNode {
-    Statement(syn::Stmt),
-    Newline,
-    Comment(String),
-}
-
 impl RsGenerator {
-    fn generate(&self) -> crate::error::Result<String> {
+    /// Generates the Rust source code
+    pub fn generate(&self) -> crate::error::Result<String> {
         // Create a Rust node for each Python node
+        let rs_nodes = self.translate_ast()?;
+
+        // Generate the Rust source code from the Rust AST nodes
+        let rs_src = RsGenerator::codegen(&rs_nodes);
+
+        Ok(rs_src)
+    }
+
+    /// Converts the Python AST nodes into Rust AST nodes.
+    fn translate_ast(&self) -> crate::error::Result<Vec<RsNode>> {
         let mut rs_nodes = vec![];
         let py_nodes = self.py_program.iter();
         for (node_no, &PyNode { ref src, ref node }) in py_nodes.enumerate() {
@@ -116,7 +93,11 @@ impl RsGenerator {
             debug!("Node {} -> {:?}", node_no, &rs_node);
             rs_nodes.push(rs_node);
         }
+        Ok(rs_nodes)
+    }
 
+    /// Generates Rust source code from Rust AST nodes.
+    fn codegen(rs_nodes: &[RsNode]) -> String {
         // Format/print Rust statements
         let formatted = rs_nodes
             .iter()
@@ -155,21 +136,59 @@ impl RsGenerator {
             })
             .flatten();
 
-        // Catenate statements with newlines and return
-        let out = formatted.fold(String::new(), |acc, next| acc + &next + "\n");
+        // Insert main
+        let with_main = std::iter::once("fn main() {".to_owned())
+            .chain(formatted)
+            .chain(std::iter::once("}".to_owned()));
 
-        Ok(out)
+        // Catenate statements with newlines and return
+        with_main.fold(String::new(), |acc, next| acc + &next + "\n")
     }
+}
+
+/// A statement, newline or comment of Python with associated context. Everything that's required
+/// to create an expression in Rust.
+#[derive(Debug)]
+pub(crate) struct PyNode {
+    src: String,
+    node: PyNodeKind,
+}
+
+#[derive(Debug)]
+pub(crate) enum PyNodeKind {
+    Statement(ast::Located<ast::StatementType>),
+    Newline(ast::Located<()>),
+    Comment(ast::Located<String>),
+}
+
+impl PyNode {
+    pub(crate) fn new(src: String, node: PyNodeKind) -> PyNode {
+        PyNode { src, node }
+    }
+}
+
+/// Convert a Python AST statement into a `PyNodeKind::Statement`.
+impl From<ast::Located<ast::StatementType>> for PyNodeKind {
+    fn from(stmt: ast::Located<ast::StatementType>) -> Self {
+        PyNodeKind::Statement(stmt)
+    }
+}
+
+#[derive(Debug)]
+enum RsNode {
+    Statement(syn::Stmt),
+    Newline,
+    Comment(String),
 }
 
 #[derive(Clone, Deref)]
 struct RsStmt(pub syn::Stmt);
 
-impl TryFrom<ast::Statement> for RsStmt {
+impl TryFrom<&ast::Statement> for RsStmt {
     type Error = TranspileError;
 
-    fn try_from(py_stmt: ast::Statement) -> Result<Self> {
-        let rs_stmt = visit_statement(&py_stmt)?;
+    fn try_from(py_stmt: &ast::Statement) -> Result<Self> {
+        let rs_stmt = visit_statement(py_stmt)?;
         Ok(RsStmt(rs_stmt))
     }
 }
