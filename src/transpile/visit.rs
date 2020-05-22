@@ -43,7 +43,7 @@ impl<'a> Visit for Operator<'a> {
     fn visit(&self) -> Result<Self::Output> {
         Ok(match self.0 {
             ast::Operator::Add => syn::BinOp::Add(<syn::Token![+]>::default()),
-            _ => return Err(TranspileError::unimplemented(self.0, None)),
+            _ => return Err(TranspileNodeError::unimplemented(self.0, None)),
         })
     }
 }
@@ -153,13 +153,13 @@ impl<'a> Visit for StringGroup<'a> {
                 conversion,
                 spec,
             } => {
-                return Err(TranspileError::unimplemented(
+                return Err(TranspileNodeError::unimplemented(
                     &(value, conversion, spec),
                     None,
                 ))
             }
             ast::StringGroup::Joined { values } => {
-                return Err(TranspileError::unimplemented(values, None))
+                return Err(TranspileNodeError::unimplemented(values, None))
             }
         })
     }

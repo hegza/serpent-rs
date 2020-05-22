@@ -5,10 +5,9 @@
 //! comment, or something else. It's kind of hacky, extensions to RustPython
 //! might make this redundant.
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::error::{Result, TranspileError};
 use rustpython_parser::parser::{parse_program, parse_statement};
-use std::error::Error as StdError;
-use std::fmt;
+use thiserror::Error as ThisError;
 
 /// Parses a Python source into a list of line-kind identifiers, one for each
 /// line.
@@ -51,9 +50,9 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
                         match next {
                             Some(next) => stmt_constituents.push(next.to_owned()),
                             None => {
-                                return Err(Error::new(ErrorKind::IdentifyLines(
+                                return Err(TranspileError::IdentifyLines(
                                     IdentifyLinesError::EofWhileConstructingStatement,
-                                )))
+                                ))
                             }
                         }
                         continue;
@@ -170,24 +169,8 @@ print(
     }
 }
 
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 pub enum IdentifyLinesError {
+    #[error("EOF while attempting to construct a multiline statement by iterating over lines")]
     EofWhileConstructingStatement,
-}
-
-impl StdError for IdentifyLinesError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        None
-    }
-}
-
-impl fmt::Display for IdentifyLinesError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            IdentifyLinesError::EofWhileConstructingStatement => write!(
-                f,
-                "Got EOF while trying to construct a statement by iterating over lines."
-            ),
-        }
-    }
 }

@@ -1,5 +1,5 @@
 use super::{PyNode, PyNodeKind};
-use crate::error::{Error, ErrorKind, Result};
+use crate::error::{Result, TranspileError};
 use crate::transpile::identify_lines::{identify_lines, LineKind};
 use rustpython_parser::ast::*;
 use std::error::Error as StdError;
@@ -50,17 +50,17 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>
                         PyNodeKind::Statement(stmt),
                     )),
                     None => {
-                        return Err(Error::new(ErrorKind::Recontextualize(
+                        return Err(TranspileError::Recontextualize(
                             RecontextualizeError::ParserDivergence,
-                        )))
+                        ))
                     }
                 }
             }
             // Non-first lines should be handled by the above implementation
             LineKind::Statement(n) => {
-                return Err(Error::new(ErrorKind::Recontextualize(
+                return Err(TranspileError::Recontextualize(
                     RecontextualizeError::MultilineNotHandled(line_no, *n),
-                )))
+                ))
             }
         }
     }

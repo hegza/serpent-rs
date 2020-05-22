@@ -24,82 +24,45 @@
 //! FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 //! IN THE SOFTWARE.
 
-use std::error::Error as StdError;
-use std::fmt;
-use std::io;
-use std::result;
+use std::{fmt, io, result};
 
 use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
-use rustpython_parser::error::ParseError;
-use rustpython_parser::location::Location;
+use rustpython_parser::{error::ParseError, location::Location};
 use syn::Error as SynError;
+use thiserror::Error as ThisError;
 
-/// A type alias for `Result<T, serpent::Error>`.
-pub type Result<T> = result::Result<T, Error>;
-
-/// An error that can occur when transpiling Python to Rust.
-#[derive(Debug)]
-pub struct Error(Box<ErrorKind>);
-
-impl Error {
-    /// A crate private constructor for `Error`.
-    pub(crate) fn new(kind: ErrorKind) -> Error {
-        Error(Box::new(kind))
-    }
-
-    /// Return the specific type of this error.
-    pub fn kind(&self) -> &ErrorKind {
-        &self.0
-    }
-
-    /// Unwrap this error into its underlying type.
-    pub fn into_kind(self) -> ErrorKind {
-        *self.0
-    }
-
-    /// Returns true if this is an I/O error.
-    ///
-    /// If this is true, the underlying `ErrorKind` is guaranteed to be
-    /// `ErrorKind::Io`.
-    pub fn is_io_error(&self) -> bool {
-        match *self.0 {
-            ErrorKind::Io(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Return the location for this error, if one exists.
-    ///
-    /// This is a convenience function that permits callers to easily access
-    /// the location on an error without doing case analysis on `ErrorKind`.
-    pub fn location(&self) -> Option<&Location> {
-        self.0.location()
-    }
-}
+/// A type alias for `Result<T, serpent::TranspileError>`.
+pub type Result<T> = result::Result<T, TranspileError>;
 
 /// The specific type of an error.
-#[derive(Debug)]
-pub enum ErrorKind {
-    /// An I/O error that occurred while reading Python source file.
-    Io(io::Error),
+#[derive(ThisError, Debug)]
+pub enum TranspileError {
+    /// An I/O error that occurred while reading Python source file. All IO errors are from Python files, as long as we only parse Python files. This may change one day.
+    #[error("IO error while reading Python source")]
+    Io(#[from] io::Error),
     /// A parsing error that occurred while parsing a string into a Python AST
     /// with RustPython.
-    Parse(ParseError),
+    #[error("Python parse error")]
+    Parse(#[from] ParseError),
     /// A parsing error that occurred while parsing a string into a Rust AST
     /// with syn.
-    ParseRust(SynError),
+    #[error("Rust parse error")]
+    ParseRust(#[from] SynError),
     /// A parsing error that occurred while identifying line kinds from a Python
     /// source.
+    #[error("Identify lines error: {0}")]
     IdentifyLines(IdentifyLinesError),
     /// An error that occurred while reconstructing context for parsed Python
     /// source.
+    #[error("Recontextualize error: {0}")]
     Recontextualize(RecontextualizeError),
     /// An error that occurred while transpiling the Python AST into Rust. This
     /// line could not be transpiled.
+    #[error("Transpile error on line {line_no}: {reason}\n\t`{line}`")]
     Transpile {
         line: String,
         line_no: usize,
-        reason: TranspileError,
+        reason: TranspileNodeError,
     },
     /// Hints that destructuring should not be exhaustive.
     ///
@@ -107,60 +70,36 @@ pub enum ErrorKind {
     /// don't count on exhaustive matching. (Otherwise, adding a new variant
     /// could break existing code.)
     #[doc(hidden)]
+    #[error("unreachable")]
     __Nonexhaustive,
 }
 
-impl ErrorKind {
+impl TranspileError {
     /// Return the location for this error, if one exists.
     ///
     /// This is a convenience function that permits callers to easily access
-    /// the location on an error without doing case analysis on `ErrorKind`.
+    /// the location on an error without doing case analysis on `TranspileError`.
     pub fn location(&self) -> Option<&Location> {
         match *self {
-            ErrorKind::Parse(ref err) => Some(&err.location),
+            TranspileError::Parse(ref err) => Some(&err.location),
             _ => None,
         }
     }
-}
 
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::new(ErrorKind::Io(err))
-    }
-}
-
-impl From<ParseError> for Error {
-    fn from(err: ParseError) -> Error {
-        Error::new(ErrorKind::Parse(err))
-    }
-}
-
-impl From<SynError> for Error {
-    fn from(err: SynError) -> Error {
-        Error::new(ErrorKind::ParseRust(err))
-    }
-}
-
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self.0 {
-            ErrorKind::Parse(ref err) => Some(err),
-            _ => unreachable!(),
+    /// Returns true if this is an I/O error.
+    ///
+    /// If this is true, the underlying `TranspileError` is guaranteed to be
+    /// `TranspileError::Io`.
+    pub fn is_io_error(&self) -> bool {
+        match *self {
+            TranspileError::Io(_) => true,
+            _ => false,
         }
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self.0 {
-            ErrorKind::Parse(ref err) => write!(f, "Python parse error: {}", err),
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum TranspileError {
+#[derive(ThisError, Debug)]
+pub enum TranspileNodeError {
     /// An error that occurred while transpiling the Python AST into Rust. A
     /// transform for this Python AST node was not implemented.
     Unimplemented {
@@ -169,19 +108,22 @@ pub enum TranspileError {
     },
 }
 
-impl TranspileError {
-    pub fn unimplemented<D: fmt::Debug>(node: &D, location: Option<Location>) -> TranspileError {
-        TranspileError::Unimplemented {
+impl TranspileNodeError {
+    pub fn unimplemented<D: fmt::Debug>(
+        node: &D,
+        location: Option<Location>,
+    ) -> TranspileNodeError {
+        TranspileNodeError::Unimplemented {
             node: format!("{:?}", node),
             location,
         }
     }
 }
 
-impl fmt::Display for TranspileError {
+impl fmt::Display for TranspileNodeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TranspileError::Unimplemented { node, location } => match location {
+            TranspileNodeError::Unimplemented { node, location } => match location {
                 // TODO: format location with {} / fmt::Display
                 Some(loc) => write!(f, "Unimplemented node: {:?} at {:?}", node, loc),
                 None => write!(f, "Unimplemented node: {:?}", node),

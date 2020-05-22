@@ -3,7 +3,7 @@
 mod error;
 mod transpile;
 
-pub use crate::error::{Error, ErrorKind, Result};
+pub use crate::error::{Result, TranspileError};
 
 /// A string representing a piece of Python source code.
 pub enum PySource<'a> {

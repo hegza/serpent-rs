@@ -9,7 +9,7 @@ pub(crate) mod visit;
 use std::result;
 
 use super::*;
-use crate::error::TranspileError;
+use crate::error::TranspileNodeError;
 use cursor::Cursor;
 use derive_deref::Deref;
 use log::{debug, info, trace};
@@ -22,8 +22,8 @@ use rustpython_parser::parser;
 use syn;
 use visit::*;
 
-/// A type alias for `Result<T, serpent::TranspileError>`.
-pub type Result<T> = result::Result<T, TranspileError>;
+/// A type alias for `Result<T, serpent::TranspileNodeError>`.
+pub type Result<T> = result::Result<T, TranspileNodeError>;
 
 /// Transpiles given Python source code to Rust source code.
 pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
@@ -94,11 +94,11 @@ impl RsGenerator {
                 PyNodeKind::Statement(stmt) => match visit_statement(&stmt, &cursor) {
                     Ok(rs_stmt) => RsNode::Statement(rs_stmt),
                     Err(err) => {
-                        return Err(crate::Error::new(ErrorKind::Transpile {
+                        return Err(TranspileError::Transpile {
                             line: src.to_string(),
                             line_no: node_no,
                             reason: err,
-                        }))
+                        })
                     }
                 },
                 PyNodeKind::Newline(_located) => RsNode::Newline,
@@ -409,7 +409,7 @@ fn visit_bigint(bigint: &BigInt) -> Result<syn::Expr> {
                 lit: syn::Lit::new(literal),
             })
         }
-        _ => return Err(TranspileError::unimplemented(bigint, None)),
+        _ => return Err(TranspileNodeError::unimplemented(bigint, None)),
     };
     debug!("{:?} -> {:?}", bigint, expr);
     Ok(expr)
