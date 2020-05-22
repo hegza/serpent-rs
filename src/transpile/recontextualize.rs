@@ -31,22 +31,47 @@ pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>
                     node: s.to_owned(),
                 }),
             )),
+            // If it's the first line of a comment, collect the comment
+            LineKind::MultilineComment(0, _content) => {
+                let mut full_comment = String::from(line.to_string());
+                while match line_kinds.peek() {
+                    Some(&(_, (LineKind::MultilineComment(x, ref _content), _))) if x != 0 => true,
+                    _ => false,
+                } {
+                    let line = (line_kinds.next().unwrap().1).1;
+                    full_comment.push_str(&line);
+                }
+
+                nodes.push(PyNode::new(
+                    full_comment.to_string(),
+                    PyNodeKind::Comment(Located {
+                        node: full_comment,
+                        location: Location::new(line_no, 0),
+                    }),
+                ));
+            }
+            // Non-first lines should be handled by the above implementation
+            LineKind::MultilineComment(n, _content) => {
+                return Err(TranspileError::Recontextualize(
+                    RecontextualizeError::MultilineNotHandled(line_no, *n),
+                ))
+            }
             // If it's the first line of a statement, extract the next statement from the parsed
             // program
             LineKind::Statement(0) => {
                 let stmt = parsed_statements.next();
-                let mut full_line = String::from(line.to_string());
+                let mut full_stmt = String::from(line.to_string());
                 while match line_kinds.peek() {
                     Some(&(_, (LineKind::Statement(x), _))) if x != 0 => true,
                     _ => false,
                 } {
                     let line = (line_kinds.next().unwrap().1).1;
-                    full_line.push_str(&line);
+                    full_stmt.push_str(&line);
                 }
 
                 match stmt {
                     Some(stmt) => nodes.push(PyNode::new(
-                        full_line.to_string(),
+                        full_stmt.to_string(),
                         PyNodeKind::Statement(stmt),
                     )),
                     None => {
