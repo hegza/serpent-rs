@@ -9,8 +9,8 @@ name = "serpent"
 path = "src/lib.rs"
 
 [[example]]
-name = "transpile-simple"
-path = "examples/transpile-simple.rs"
+name = "transpile_simple"
+path = "examples/transpile_simple.rs"
 
 [dependencies]
 # Python AST

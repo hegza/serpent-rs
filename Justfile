@@ -5,6 +5,6 @@ test:
     cargo test
 
 try:
-    cargo run --example transpile-simple
+    cargo run --example transpile_simple
 
 alias run := try
