@@ -24,75 +24,97 @@
 //! FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 //! IN THE SOFTWARE.
 
-use std::{fmt, io, result};
+use std::{fmt, io};
 
-use crate::transpile::{identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError};
+use crate::transpile_v0::{
+    identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError,
+};
 use rustpython_parser::{error::ParseError, location::Location};
 use syn::Error as SynError;
 use thiserror::Error as ThisError;
 
-/// A type alias for `Result<T, serpent::TranspileError>`.
-pub type Result<T> = result::Result<T, TranspileError>;
-
-/// The specific type of an error.
+/// An error that occurred due to a top-level API call.
 #[derive(ThisError, Debug)]
-pub enum TranspileError {
-    /// An I/O error that occurred while reading Python source file. All IO errors are from Python files, as long as we only parse Python files. This may change one day.
+pub enum SerpentError {
+    /// An I/O error that occurred while reading a Python source file. All IO errors are from Python
+    /// files, as long as we only parse Python files. This may change one day.
     #[error("IO error while reading Python source")]
     Io(#[from] io::Error),
-    /// A parsing error that occurred while parsing a string into a Python AST
+    /// A parsing error that occurred while parsing the string contents of a file into a Python AST
     /// with RustPython.
     #[error("Python parse error")]
     Parse(#[from] ParseError),
-    /// A parsing error that occurred while parsing a string into a Rust AST
-    /// with syn.
-    #[error("Rust parse error")]
-    ParseRust(#[from] SynError),
-    /// A parsing error that occurred while identifying line kinds from a Python
-    /// source.
-    #[error("Identify lines error: {0}")]
-    IdentifyLines(IdentifyLinesError),
-    /// An error that occurred while reconstructing context for parsed Python
-    /// source.
-    #[error("Recontextualize error: {0}")]
-    Recontextualize(RecontextualizeError),
-    /// An error that occurred while transpiling the Python AST into Rust. This
-    /// line could not be transpiled.
-    #[error("Transpile error on line {line_no}: {reason}\n\t`{line}`")]
-    Transpile {
-        line: String,
-        line_no: usize,
-        reason: TranspileNodeError,
-    },
+    /// An error that occurred while transpiling a Python file into a Rust AST. The first parameter
+    /// can be whatever that best identifies the module being transpiled: either the file name or
+    /// the identifier of the module being transpiled.
+    #[error("Transpile error in {0}:\n{1}")]
+    Transpile(String, TranspileError),
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
     /// don't count on exhaustive matching. (Otherwise, adding a new variant
     /// could break existing code.)
     #[doc(hidden)]
-    #[error("unreachable")]
+    #[error("Unreachable")]
     __Nonexhaustive,
 }
 
-impl TranspileError {
+/// An error that occurred while transpiling a Python file into a Rust AST.
+#[derive(ThisError, Debug)]
+pub enum TranspileError {
+    /// A parsing error that occurred while parsing the string contents of a file into a Python AST
+    /// with RustPython.
+    #[error("Python parse error")]
+    Parse(#[from] ParseError),
+    /// A parsing error that occurred while identifying line kinds from Python
+    /// source.
+    #[error("Identify lines error: {0}")]
+    IdentifyLines(#[from] IdentifyLinesError),
+    /// An error that occurred while reconstructing context for parsed Python
+    /// source.
+    #[error("Recontextualize error: {0}")]
+    Recontextualize(#[from] RecontextualizeError),
+    /// An error that occurred while transpiling the Python AST into Rust. This
+    /// AST node could not be transpiled.
+    #[error("Transpile error on line {line_no}: {reason}\n\t`{line}`")]
+    TranspileNode {
+        line: String,
+        line_no: usize,
+        reason: TranspileNodeError,
+    },
+    /// A parsing error that occurred while parsing a string into a Rust AST
+    /// with syn, eg. while generating Rust source code.
+    #[error("Rust parse error")]
+    ParseRust(#[from] SynError),
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes sure clients
+    /// don't count on exhaustive matching. (Otherwise, adding a new variant
+    /// could break existing code.)
+    #[doc(hidden)]
+    #[error("Unreachable")]
+    __Nonexhaustive,
+}
+
+impl SerpentError {
     /// Return the location for this error, if one exists.
     ///
     /// This is a convenience function that permits callers to easily access
-    /// the location on an error without doing case analysis on `TranspileError`.
+    /// the location on an error without doing case analysis on `SerpentError`.
     pub fn location(&self) -> Option<&Location> {
         match *self {
-            TranspileError::Parse(ref err) => Some(&err.location),
+            SerpentError::Parse(ref err) => Some(&err.location),
             _ => None,
         }
     }
 
     /// Returns true if this is an I/O error.
     ///
-    /// If this is true, the underlying `TranspileError` is guaranteed to be
-    /// `TranspileError::Io`.
+    /// If this is true, the underlying `SerpentError` is guaranteed to be
+    /// `SerpentError::Io`.
     pub fn is_io_error(&self) -> bool {
         match *self {
-            TranspileError::Io(_) => true,
+            SerpentError::Io(_) => true,
             _ => false,
         }
     }

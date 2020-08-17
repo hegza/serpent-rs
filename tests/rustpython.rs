@@ -20,4 +20,18 @@ fn valid_statements() {
         a + b)"
     )
     .is_ok());
+
+    assert!(parse_statement(
+        "
+def foo():
+
+    # Comment
+
+    a = 5
+    b = 3
+
+    return a + b
+"
+    )
+    .is_ok());
 }

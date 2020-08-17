@@ -6,11 +6,14 @@
 //! might make this redundant.
 
 use std::iter::Enumerate;
-use std::str::Lines;
+use std::{result, str::Lines};
 
-use crate::error::{Result, TranspileError};
+use log::trace;
 use rustpython_parser::parser::{parse_program, parse_statement};
 use thiserror::Error as ThisError;
+
+/// Type alias for Result<T, IdentifyLinesError>
+type Result<T> = result::Result<T, IdentifyLinesError>;
 
 /// Parses a Python source into a list of line-kind identifiers, one for each
 /// line.
@@ -35,7 +38,7 @@ pub(crate) fn identify_lines(src: &str) -> Result<Vec<(LineKind, String)>> {
             let com_lines = consume_multiline_comment(line_no, line, &mut lines)?;
             line_kinds.extend(com_lines);
         }
-        // Identify the line as a statement, if it's not whitespace or a comment
+        // If the line doesn't start any of the above, it starts a statement
         else {
             let stmt_lines = consume_multiline_statement(line_no, line, &mut lines)?;
             line_kinds.extend(stmt_lines);
@@ -51,11 +54,11 @@ fn consume_multiline_comment(
     first_line_no: usize,
     first_line: String,
     lines: &mut Enumerate<Lines>,
-) -> Result<Vec<(LineKind, String)>> {
+) -> result::Result<Vec<(LineKind, String)>, IdentifyLinesError> {
     let mut line_kinds = vec![];
 
     let mut len_lines = 1;
-    let mut com_constituents = vec![first_line];
+    let mut com_constituents = vec![first_line.clone()];
 
     // Loop, adding a line to the comment candidate each time until the end of the multiline-comment
     while let Some((_line_no, next)) = lines.next() {
@@ -75,40 +78,120 @@ fn consume_multiline_comment(
     }
 
     // Return error if the iterator runs out without an ending comment tag ('"""')
-    Err(TranspileError::IdentifyLines(
-        IdentifyLinesError::EofWhileConstructingComment(first_line_no),
+    Err(IdentifyLinesError::EofWhileConstructingComment(
+        first_line_no,
+        first_line,
     ))
 }
 
 fn consume_multiline_statement(
     first_line_no: usize,
     first_line: String,
+    rest: &mut Enumerate<Lines>,
+) -> Result<Vec<(LineKind, String)>> {
+    // FIXME: this approach is bad and doesn't work for functions
+
+    // First, find the shortest possible parseable single-statement...
+    let stem = consume_minimal_statement(first_line_no, first_line, rest)?;
+    // ... then, add statements as long as they can be, to form the longest possible multiline-statement
+    let all = consume_statement_greedy(stem, rest)?;
+
+    Ok(all)
+}
+
+fn consume_statement_greedy(
+    stem: Vec<(LineKind, String)>,
+    lines: &mut Enumerate<Lines>,
+) -> Result<Vec<(LineKind, String)>> {
+    let mut lines = lines.peekable();
+    let mut line_kinds = stem.clone();
+
+    trace!(
+        "Constructing the longest possible multiline statement by attempting to parse as many consequent lines as possible into a single statement"
+    );
+
+    let mut len_lines = stem.len();
+    let mut stmt_constituents: Vec<String> = line_kinds.iter().map(|(_, s)| s.clone()).collect();
+
+    loop {
+        let aggregate = stmt_constituents
+            .iter()
+            .skip(1)
+            .fold(stmt_constituents.first().unwrap().clone(), |agg, item| {
+                agg + "\n" + item
+            });
+
+        let stmt = parse_statement(&aggregate);
+        match stmt {
+            Ok(_) => {
+                trace!("\tOK <- {}", &aggregate);
+
+                let next = lines.peek();
+                match next {
+                    // Still more appendable lines?
+                    Some(next) => {
+                        stmt_constituents.push(next.1.to_owned());
+                        len_lines += 1;
+                        lines.next();
+                        continue;
+                    }
+                    // Ran out of lines in file -> return the statement
+                    None => break,
+                }
+            }
+            // No longer forms a single-statement -> return the statement
+            Err(_) => break,
+        };
+    }
+    trace!("\tDone");
+
+    for n in 0..len_lines {
+        line_kinds.push((LineKind::Statement(n), stmt_constituents[n].to_string()));
+    }
+
+    Ok(line_kinds)
+}
+
+fn consume_minimal_statement(
+    first_line_no: usize,
+    first_line: String,
     lines: &mut Enumerate<Lines>,
 ) -> Result<Vec<(LineKind, String)>> {
     let mut line_kinds = vec![];
 
+    trace!(
+        "Constructing minimal multiline statement by attempting to parse as many consequent lines as required into a single statement"
+    );
+
     let mut len_lines = 1;
-    let mut stmt_constituents = vec![first_line];
-    // Loop, adding a line to the statement candidate each time. The number of
-    // iterations until a valid statement can be constructed determines the length
-    // of the statement
+    let mut stmt_constituents: Vec<String> = vec![first_line.clone()];
+
+    // Loop, adding a line to the statement candidate each time
     loop {
         let aggregate = stmt_constituents
             .iter()
-            .fold(String::new(), |agg, item| agg + item);
+            .skip(1)
+            .fold(stmt_constituents.first().unwrap().clone(), |agg, item| {
+                agg + "\n" + item
+            });
 
         let stmt = parse_statement(&aggregate);
         match stmt {
-            Ok(_) => break,
+            Ok(_) => {
+                trace!("\tOK <- {}", &aggregate);
+                break;
+            }
             Err(_) => {
+                trace!("\tErr <- {}", &aggregate);
                 // Get the next line, returning error if the file ends.
                 let next = lines.next();
                 len_lines += 1;
                 match next {
                     Some(next) => stmt_constituents.push(next.1.to_owned()),
                     None => {
-                        return Err(TranspileError::IdentifyLines(
-                            IdentifyLinesError::EofWhileConstructingStatement(first_line_no),
+                        return Err(IdentifyLinesError::EofWhileConstructingStatement(
+                            first_line_no,
+                            first_line,
                         ))
                     }
                 }
@@ -259,8 +342,12 @@ This is a multiline comment
 
 #[derive(ThisError, Debug)]
 pub enum IdentifyLinesError {
-    #[error("EOF while attempting to construct a multiline statement starting from line {0}")]
-    EofWhileConstructingStatement(usize),
-    #[error("EOF while attempting to construct a multiline comment starting from line {0}")]
-    EofWhileConstructingComment(usize),
+    #[error(
+        "EOF while attempting to construct a multiline statement starting from line {0}:\n\t`{1}`"
+    )]
+    EofWhileConstructingStatement(usize, String),
+    #[error(
+        "EOF while attempting to construct a multiline comment starting from line {0}:\n\t`{1}`"
+    )]
+    EofWhileConstructingComment(usize, String),
 }

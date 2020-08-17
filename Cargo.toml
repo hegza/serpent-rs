@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "transpile_simple"
 path = "examples/transpile_simple.rs"
 
+[[example]]
+name = "transpile_black_scholes"
+path = "examples/transpile_black_scholes.rs"
+
 [dependencies]
 # Python AST
 rustpython-parser = { version = "0.1.1" }
@@ -34,6 +38,6 @@ ctor = "0.1.14"
 thiserror = "^1.0"
 
 [dev-dependencies]
-sourcefile = "^0.1"
 lazy_static = "^1.4"
+sourcefile = "^0.1"
 anyhow = "^1.0"

@@ -1,219 +1,184 @@
-//! Module with transpiler components. Allows transpiling Python source code to
-//! Rust source code.
-pub(crate) mod cursor;
-pub(crate) mod identify_lines;
-pub(crate) mod recontextualize;
-pub(crate) mod remap_functions;
-pub(crate) mod visit;
-
-use std::result;
-
+// TODO: turn Visit create into a macro
+// TODO: turn visit() into a macro
 use super::*;
-use crate::error::TranspileNodeError;
-use cursor::Cursor;
-use derive_deref::Deref;
-use log::{debug, info, trace};
-use num_bigint::BigInt;
-use quote::ToTokens;
-use recontextualize::recontextualize;
-use remap_functions::remap_functions;
-use rustpython_parser::ast;
-use rustpython_parser::parser;
-use syn;
-use visit::*;
 
-/// A type alias for `Result<T, serpent::TranspileNodeError>`.
+use ast::Location;
+use proc_macro2::Span;
+use rustpython_parser::ast;
+use syn;
+
+/// A type alias for `Result<T, TranspileNodeError>`.
 pub type Result<T> = result::Result<T, TranspileNodeError>;
 
-/// Transpiles given Python source code to Rust source code.
-pub fn transpile_python(src: PySource) -> crate::error::Result<String> {
-    // Create a Rust source-code generator by collecting information from the Python
-    // source code
-    let generator = match src {
-        PySource::Program(s, ProgramKind::Runnable) => {
-            // Parse source into a program using RustPython
-            info!("Parsing Python program...");
-            let program = parser::parse_program(s)?;
+pub trait Visit {
+    type Output;
 
-            // Add back unsupported context like comments
-            info!("Recontextualizing Python program...");
-            let py_nodes = recontextualize(s, program)?;
-            RsGenerator {
-                py_program: py_nodes,
-            }
-        }
-        PySource::Program(_s, ProgramKind::NonRunnable) => {
-            // TODO: interpret freestanding Python statements as const declarations
-            unimplemented!()
-        }
-    };
-
-    // Generate the Rust source code with the information collected from the Python
-    // source files
-    info!("Generating Rust source code...");
-    generator.generate()
+    fn visit(&self) -> Result<Self::Output>;
 }
 
-/// Represents what's required to generate a Rust program from Python source.
-///
-/// Call .generate() to produce a program.
-struct RsGenerator {
-    /// The original Python program parsed as a vector of nodes, containing
-    /// single or multiline statements and unknown entries (whitespace,
-    /// comments, other). Contains location as context for each entry.
-    py_program: Vec<PyNode>,
+#[derive(Debug)]
+pub struct BinOp<'a> {
+    pub left: &'a Box<ast::Expression>,
+    pub op: &'a ast::Operator,
+    pub right: &'a Box<ast::Expression>,
 }
 
-impl RsGenerator {
-    /// Generates the Rust source code
-    pub fn generate(&self) -> crate::error::Result<String> {
-        // Create a Rust node for each Python node
-        let mut rs_nodes = self.translate_ast()?;
+impl<'a> Visit for BinOp<'a> {
+    type Output = syn::Expr;
 
-        // Go over the Rust AST and do function mappings
-        RsGenerator::remap_functions(&mut rs_nodes);
-
-        // Generate the Rust source code from the Rust AST nodes
-        let rs_src = RsGenerator::codegen(&rs_nodes);
-
-        Ok(rs_src)
+    fn visit(&self) -> Result<syn::Expr> {
+        let bin_expr = syn::ExprBinary {
+            attrs: vec![],
+            left: Box::new(Expression(&self.left).visit()?),
+            op: Operator(&self.op).visit()?,
+            right: Box::new(Expression(&self.right).visit()?),
+        };
+        Ok(syn::Expr::Binary(bin_expr))
     }
+}
 
-    /// Converts the Python AST nodes into Rust AST nodes.
-    fn translate_ast(&self) -> crate::error::Result<Vec<RsNode>> {
-        let mut rs_nodes = vec![];
+#[derive(Debug)]
+pub struct Operator<'a>(pub &'a ast::Operator);
 
-        let mut cursor = Cursor::new(&self.py_program);
+impl<'a> Visit for Operator<'a> {
+    type Output = syn::BinOp;
 
-        while let Some(node) = cursor.advance() {
-            let node_no = cursor.idx();
-            let src = &node.src;
-            let node = &node.node;
-            info!("Node {}: `{}`", node_no, src);
-            let rs_node = match node {
-                PyNodeKind::Statement(stmt) => match visit_statement(&stmt, &cursor) {
-                    Ok(rs_stmt) => RsNode::Statement(rs_stmt),
-                    Err(err) => {
-                        return Err(TranspileError::Transpile {
-                            line: src.to_string(),
-                            line_no: node_no,
-                            reason: err,
-                        })
-                    }
+    fn visit(&self) -> Result<Self::Output> {
+        Ok(match self.0 {
+            ast::Operator::Add => syn::BinOp::Add(<syn::Token![+]>::default()),
+            _ => return Err(TranspileNodeError::unimplemented(self.0, None)),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Parameter<'a>(pub &'a ast::Parameter);
+
+impl<'a> Visit for Parameter<'a> {
+    type Output = syn::FnArg;
+
+    fn visit(&self) -> Result<syn::FnArg> {
+        let _loc = &self.0.location;
+        let id_pat = Pat::from(&self.0.arg).0;
+        let pat = syn::PatType {
+            attrs: vec![],
+            pat: Box::new(id_pat),
+            colon_token: <syn::Token![:]>::default(),
+            ty: Box::new(syn::Type::Path(syn::TypePath {
+                qself: None,
+                path: syn::Path {
+                    leading_colon: None,
+                    segments: syn::punctuated::Punctuated::new(),
                 },
-                PyNodeKind::Newline(_located) => RsNode::Newline,
-                PyNodeKind::Comment(ast::Located { node, .. }) => RsNode::Comment(node.clone()),
-            };
-            debug!("Node {} -> {:?}", node_no, &rs_node);
-            rs_nodes.push(rs_node);
-        }
-
-        Ok(rs_nodes)
-    }
-
-    fn remap_functions(nodes: &mut Vec<RsNode>) {
-        for node in nodes {
-            // Pick out statements, no comments or newlines
-            if let RsNode::Statement(stmt) = node {
-                // Recurse through each statement, visiting all method calls, remapping the print statements
-                remap_functions(stmt);
-            };
-        }
-    }
-
-    /// Generates Rust source code from Rust AST nodes.
-    fn codegen(rs_nodes: &[RsNode]) -> String {
-        // Format/print Rust statements
-        let formatted = rs_nodes
-            .iter()
-            .enumerate()
-            .map(|(node_no, node)| match node {
-                RsNode::Statement(stmt) => {
-                    let tokens = stmt.to_token_stream();
-
-                    let relevant = tokens
-                        .to_string()
-                        .lines()
-                        .map(|x| x.trim().to_owned())
-                        .collect::<Vec<String>>();
-                    info!("Node {} = Stmt::{:?} -> {:?}", node_no, stmt, &relevant);
-
-                    relevant
-                }
-                RsNode::Newline => vec!["".to_owned()],
-                RsNode::Comment(s) => vec![format!("// {}", s)],
-            })
-            .flatten();
-
-        // Insert main
-        let with_main = std::iter::once("fn main() {".to_owned())
-            .chain(formatted)
-            .chain(std::iter::once("}".to_owned()));
-
-        // Catenate statements with newlines and return
-        let out = with_main.fold(String::new(), |acc, next| acc + &next + "\n");
-
-        // Format again
-        let (_, file_map, _) = rustfmt::format_input::<Vec<u8>>(
-            rustfmt::Input::Text(out),
-            &rustfmt::config::Config::default(),
-            None,
-        )
-        .unwrap();
-
-        let output = &file_map.first().unwrap().1;
-        let output_str = output.chars().map(|(c, _)| c).collect::<String>();
-        output_str
-    }
-}
-
-/// A statement, newline or comment of Python with associated context.
-/// Everything that's required to create an expression in Rust.
-#[derive(Debug)]
-pub(crate) struct PyNode {
-    src: String,
-    node: PyNodeKind,
-}
-
-#[derive(Debug)]
-pub(crate) enum PyNodeKind {
-    Statement(ast::Located<ast::StatementType>),
-    Newline(ast::Located<()>),
-    Comment(ast::Located<String>),
-}
-
-impl PyNode {
-    pub(crate) fn new(src: String, node: PyNodeKind) -> PyNode {
-        PyNode { src, node }
-    }
-}
-
-impl cursor::Node for PyNode {}
-
-/// Convert a Python AST statement into a `PyNodeKind::Statement`.
-impl From<ast::Located<ast::StatementType>> for PyNodeKind {
-    fn from(stmt: ast::Located<ast::StatementType>) -> Self {
-        PyNodeKind::Statement(stmt)
+            })),
+        };
+        Ok(syn::FnArg::Typed(pat))
     }
 }
 
 #[derive(Debug)]
-enum RsNode {
-    Statement(syn::Stmt),
-    Newline,
-    Comment(String),
+pub struct Expression<'a>(pub &'a ast::Expression);
+
+impl<'a> Visit for Expression<'a> {
+    type Output = syn::Expr;
+
+    fn visit(&self) -> Result<syn::Expr> {
+        trace!("Expression::visit -> {:?}", self);
+        let location = &self.0.location;
+        let expr = &self.0.node;
+
+        let rs_expr = match expr {
+            ast::ExpressionType::Number { value } => visit_number(&value)?,
+            ast::ExpressionType::Binop { a, op, b } => BinOp {
+                left: a,
+                op,
+                right: b,
+            }
+            .visit()?,
+            ast::ExpressionType::Identifier { name } => syn::Expr::Path(Path(name).visit()?),
+            ast::ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
+                attrs: vec![],
+                func: Box::new(Expression(&*function).visit()?),
+                paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
+                args: visit_args(args)?,
+            }),
+            ast::ExpressionType::String { value } => StringGroup(value).visit()?,
+            _ => {
+                println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
+                unimplemented!()
+            }
+        };
+        debug!("{:?} -> {:?}", &self, &rs_expr);
+        Ok(rs_expr)
+    }
 }
 
-#[derive(Clone, Deref)]
-struct RsStmt(pub syn::Stmt);
+pub struct Path<'a>(pub &'a str);
+
+impl<'a> Visit for Path<'a> {
+    type Output = syn::ExprPath;
+
+    fn visit(&self) -> Result<syn::ExprPath> {
+        let name = self.0;
+
+        Ok(syn::ExprPath {
+            attrs: vec![],
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: {
+                    let mut segs = syn::punctuated::Punctuated::new();
+                    segs.push(syn::PathSegment {
+                        ident: Ident::from(name).0,
+                        arguments: syn::PathArguments::None,
+                    });
+                    segs
+                },
+            },
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct StringGroup<'a>(pub &'a ast::StringGroup);
+
+impl<'a> Visit for StringGroup<'a> {
+    type Output = syn::Expr;
+
+    fn visit(&self) -> Result<syn::Expr> {
+        Ok(match self.0 {
+            ast::StringGroup::Constant { value } => syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(syn::LitStr::new(value, Span::call_site())),
+            }),
+            ast::StringGroup::FormattedValue {
+                value,
+                conversion,
+                spec,
+            } => {
+                return Err(TranspileNodeError::unimplemented(
+                    &(value, conversion, spec),
+                    None,
+                ))
+            }
+            ast::StringGroup::Joined { values } => {
+                return Err(TranspileNodeError::unimplemented(values, None))
+            }
+        })
+    }
+}
+
+// Old implementations
 
 /// Converts a Python AST node into a Rust AST node.
 ///
 /// Note that if the parameter is an expression statement, a `Stmt::Semi` is
 /// returned instead of an `Stmt::Expr`. This is the correct functionality.
-pub(crate) fn visit_statement(stmt: &ast::Statement, cursor: &Cursor<PyNode>) -> Result<syn::Stmt> {
-    let _location = &stmt.location;
-    let stmt = &stmt.node;
+pub(crate) fn visit_statement(
+    stmt: &ast::StatementType,
+    location: Option<&Location>,
+    cursor: Option<&Cursor<PyNode>>,
+) -> result::Result<syn::Stmt, TranspileNodeError> {
     trace!("visit: {:?}", stmt);
 
     match stmt {
@@ -263,7 +228,7 @@ fn visit_function_def(
     body: &ast::Suite,
     _decorator_list: &[ast::Expression],
     _returns: Option<&ast::Expression>,
-    cursor: &Cursor<PyNode>,
+    cursor: Option<&Cursor<PyNode>>,
 ) -> Result<syn::Stmt> {
     // signature, eg. `unsafe fn initialize(&self)`
     let signature = syn::Signature {
@@ -312,10 +277,10 @@ fn visit_params(
 }
 
 // TODO: add indentation information somehow
-fn visit_body(body: &ast::Suite, cursor: &Cursor<PyNode>) -> Result<syn::Block> {
+fn visit_body(body: &ast::Suite, cursor: Option<&Cursor<PyNode>>) -> Result<syn::Block> {
     let stmts = body
         .into_iter()
-        .map(|py_stmt| visit_statement(&py_stmt, cursor))
+        .map(|py_stmt| visit_statement(&py_stmt.node, Some(&py_stmt.location), cursor))
         .collect::<Result<Vec<syn::Stmt>>>()?;
     Ok(syn::Block {
         brace_token: syn::token::Brace(proc_macro2::Span::call_site()),

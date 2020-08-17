@@ -1,19 +1,27 @@
 use super::{PyNode, PyNodeKind};
-use crate::error::{Result, TranspileError};
-use crate::transpile::identify_lines::{identify_lines, LineKind};
+use crate::error::TranspileError;
+use crate::transpile_v0::identify_lines::{identify_lines, LineKind};
 use rustpython_parser::ast::*;
 use std::error::Error as StdError;
-use std::fmt;
+use std::{fmt, result};
 
 /// Annotates the program with line kinds, returning contextualized nodes that
 /// can be used to generate Rust. Nodes don't quite match to lines, eg. a
 /// function block is just one node.
-pub(crate) fn recontextualize(src: &str, program: Program) -> Result<Vec<PyNode>> {
+pub(crate) fn recontextualize(
+    src: &str,
+    program: Program,
+) -> result::Result<Vec<PyNode>, TranspileError> {
     let mut nodes = vec![];
 
     let mut parsed_statements = program.statements.into_iter();
 
+    // Iterate over lines in the source and annotate them with the kind of line in question
     let line_kinds = identify_lines(src)?;
+
+    debug_assert_eq!(line_kinds.len(), src.lines().count(), "identify_lines returned a different amount of lines than there were originally in the input source file");
+
+    // Iterate over line kinds and transform them into Python nodes
     let mut line_kinds = line_kinds.into_iter().enumerate().peekable();
     while let Some((line_no, (ref line_kind, ref line))) = line_kinds.next() {
         match line_kind {

@@ -1,4 +1,4 @@
-example := "transpile_simple"
+example := "transpile_black_scholes"
 
 build:
     cargo build
