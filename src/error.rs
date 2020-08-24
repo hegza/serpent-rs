@@ -26,29 +26,27 @@
 
 use std::{fmt, io};
 
-use crate::transpile_v0::{
-    identify_lines::IdentifyLinesError, recontextualize::RecontextualizeError,
-};
 use rustpython_parser::{error::ParseError, location::Location};
-use syn::Error as SynError;
 use thiserror::Error as ThisError;
 
 /// An error that occurred due to a top-level API call.
 #[derive(ThisError, Debug)]
 pub enum SerpentError {
-    /// An I/O error that occurred while reading a Python source file. All IO errors are from Python
-    /// files, as long as we only parse Python files. This may change one day.
+    /// An I/O error that occurred while reading a Python source file. All IO
+    /// errors are from Python files, as long as we only parse Python files.
+    /// This may change one day.
     #[error("IO error while reading Python source")]
     Io(#[from] io::Error),
-    /// A parsing error that occurred while parsing the string contents of a file into a Python AST
-    /// with RustPython.
+    /// A parsing error that occurred while parsing the string contents of a
+    /// file into a Python AST with RustPython.
     #[error("Python parse error")]
     Parse(#[from] ParseError),
-    /// An error that occurred while transpiling a Python file into a Rust AST. The first parameter
-    /// can be whatever that best identifies the module being transpiled: either the file name or
-    /// the identifier of the module being transpiled.
-    #[error("Transpile error in {0}:\n{1}")]
-    Transpile(String, TranspileError),
+    /// An error that occurred while transpiling a Python file into a Rust AST.
+    #[error("Transpile error")]
+    Transpile(#[from] TranspileError),
+    /// An error that occurred while expanding a Rust AST into Rust source code.
+    #[error("Rust AST expansion error")]
+    Expand,
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
@@ -59,41 +57,12 @@ pub enum SerpentError {
     __Nonexhaustive,
 }
 
-/// An error that occurred while transpiling a Python file into a Rust AST.
 #[derive(ThisError, Debug)]
-pub enum TranspileError {
-    /// A parsing error that occurred while parsing the string contents of a file into a Python AST
-    /// with RustPython.
-    #[error("Python parse error")]
-    Parse(#[from] ParseError),
-    /// A parsing error that occurred while identifying line kinds from Python
-    /// source.
-    #[error("Identify lines error: {0}")]
-    IdentifyLines(#[from] IdentifyLinesError),
-    /// An error that occurred while reconstructing context for parsed Python
-    /// source.
-    #[error("Recontextualize error: {0}")]
-    Recontextualize(#[from] RecontextualizeError),
-    /// An error that occurred while transpiling the Python AST into Rust. This
-    /// AST node could not be transpiled.
-    #[error("Transpile error on line {line_no}: {reason}\n\t`{line}`")]
-    TranspileNode {
-        line: String,
-        line_no: usize,
-        reason: TranspileNodeError,
-    },
-    /// A parsing error that occurred while parsing a string into a Rust AST
-    /// with syn, eg. while generating Rust source code.
-    #[error("Rust parse error")]
-    ParseRust(#[from] SynError),
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    #[error("Unreachable")]
-    __Nonexhaustive,
+pub struct TranspileError {
+    pub location: Location,
+    pub filename: Option<String>,
+    pub line: String,
+    pub inner: TranspileNodeError,
 }
 
 impl SerpentError {
@@ -104,6 +73,7 @@ impl SerpentError {
     pub fn location(&self) -> Option<&Location> {
         match *self {
             SerpentError::Parse(ref err) => Some(&err.location),
+            SerpentError::Transpile(ref err) => Some(&err.location),
             _ => None,
         }
     }
@@ -116,6 +86,31 @@ impl SerpentError {
         match *self {
             SerpentError::Io(_) => true,
             _ => false,
+        }
+    }
+}
+
+impl fmt::Display for TranspileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(file) = &self.filename {
+            write!(
+                f,
+                "Could not transpile line {}, column {}, in {}: `{}`. reason: {}",
+                self.location.row(),
+                self.location.column(),
+                file,
+                self.line,
+                self.inner
+            )
+        } else {
+            write!(
+                f,
+                "Could not transpile line {}, column {}: `{}`, reason: {}",
+                self.location.row(),
+                self.location.column(),
+                self.line,
+                self.inner
+            )
         }
     }
 }
@@ -138,6 +133,27 @@ impl TranspileNodeError {
         TranspileNodeError::Unimplemented {
             node: format!("{:?}", node),
             location,
+        }
+    }
+
+    pub fn location(&self) -> Option<&Location> {
+        match self {
+            TranspileNodeError::Unimplemented { location, .. } => location.as_ref(),
+        }
+    }
+
+    pub fn with_source(self, src: &str, filename: Option<String>) -> TranspileError {
+        let location = self.location().unwrap().clone();
+        let line = src
+            .lines()
+            .nth(location.row() - 1)
+            .expect(&format!("source has less than {} rows", location.row()))
+            .to_owned();
+        TranspileError {
+            filename,
+            location,
+            line,
+            inner: self,
         }
     }
 }

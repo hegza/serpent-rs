@@ -1,4 +1,4 @@
-use serpent::{transpile_v0, ProgramKind, PySource};
+use serpent::transpile_file;
 use sourcefile::SourceFile;
 
 use std::fmt;
@@ -36,16 +36,16 @@ impl<'s> fmt::Display for SourceView<'s> {
 fn main() {
     pretty_env_logger::init();
 
+    let filename = "examples/py/simple.py";
     let source_file = {
-        let filename = "examples/py/simple.py";
         let sf = SourceFile::default();
         sf.add_file(filename).unwrap()
     };
     let source = SourceView(&source_file.contents, Language::Python, true);
 
     println!("Source:\n{}", &source);
-    let result = transpile_v0(PySource::Program(&source.0, ProgramKind::Runnable)).unwrap();
+    let result = transpile_file(filename).unwrap();
     println!();
-    let view = SourceView(&result, Language::Rust, false);
+    let view = SourceView(&result.program, Language::Rust, false);
     println!("Result:\n{}", &view);
 }

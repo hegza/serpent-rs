@@ -1,15 +1,13 @@
 use anyhow::{Context, Result};
-use serpent::{transpile_v0, ProgramKind, PySource, Transpile};
-use sourcefile::SourceFile;
 
 use std::fmt;
 
 const DIR: &str = "examples/py/black_scholes/";
-
 /// (source code string, language, line numbers?)
 #[derive(Debug, Clone)]
-struct SourceView<'s>(&'s str, Language, bool);
+pub struct SourceView<'s>(&'s str, Language, bool);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 enum Language {
     Python,
@@ -39,33 +37,12 @@ impl<'s> fmt::Display for SourceView<'s> {
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
-    // NEW
     let source_module = serpent::import_module(DIR);
     let transpiled = source_module?
         .transpile()
         .context(format!("unable to transpile module from path: \"{}\"", DIR))?;
-    println!("Transpiler messages:\n{:?}", transpiled.messages);
-    println!("Transpiled Rust source code:\n{}", transpiled.out);
-
-    // OLD
-
-    let source_file = {
-        let sf = SourceFile::default();
-        sf.add_file(DIR.to_string() + "__init__.py")
-            .unwrap()
-            .add_file(DIR.to_string() + "black_scholes_dp.py")
-            .unwrap()
-            .add_file(DIR.to_string() + "black_scholes_ndp.py")
-            .unwrap()
-    };
-    let source = SourceView(&source_file.contents, Language::Python, true);
-
-    println!("Source:\n{}", &source);
-    let result = transpile_v0(PySource::Program(&source.0, ProgramKind::Runnable))
-        .context(format!("unable to transpile source"))?;
-    println!();
-    let view = SourceView(&result, Language::Rust, false);
-    println!("Result:\n{}", &view);
+    let program = SourceView(&transpiled.program, Language::Rust, true);
+    println!("Transpiled Rust source code:\n```rust\n{}\n```", program);
 
     Ok(())
 }

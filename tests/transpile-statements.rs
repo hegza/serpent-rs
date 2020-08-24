@@ -1,19 +1,19 @@
-use serpent::{transpile_v0, ProgramKind, PySource};
+use serpent::transpile_str;
+use test_case::test_case;
 
-#[test]
-fn transpile_local() {
-    let stmt = "a = 5";
-
-    let transpiled = transpile_v0(PySource::Program(stmt, ProgramKind::Runnable)).unwrap();
-
-    assert_eq!(transpiled, "fn main() {\n    let a = 5;\n}\n");
-}
-
-#[test]
-fn transpile_multiline() {
-    let py = include_str!("input/simple_multiline.py");
-
-    let transpiled = transpile_v0(PySource::Program(py, ProgramKind::Runnable)).unwrap();
-
-    assert_eq!(transpiled, include_str!("input/simple_multiline.rs"));
+#[test_case(
+"a = 5"
+=>
+"fn main() {
+    let a = 5;
+}"
+;
+"simple local transpiles right"
+)]
+#[test_case(
+    include_str!("input/simple_multiline.py") =>
+    include_str!("input/simple_multiline.rs");
+    "simple multiline transpiles right")]
+fn transpile_runnable(stmt: &str) -> String {
+    transpile_str(stmt, true).unwrap().program
 }

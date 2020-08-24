@@ -8,7 +8,7 @@
 //! ```
 //! # const DIR: &str = "examples/py/black_scholes/";
 //! use anyhow::{Context, Result};
-//! use serpent::{transpile, Transpile, ProgramKind, PySource};
+//! use serpent::import_module;
 //!
 //! fn main() -> Result<()> {
 //!     let source_module = serpent::import_module(DIR);
@@ -22,36 +22,30 @@
 //! ```
 mod error;
 mod py_module;
-mod transpile_v0;
-mod transpile_v1;
+mod transpile;
 
 pub use crate::error::{SerpentError, TranspileError};
 pub use crate::py_module::{import_module, ImportError, PyModule};
-pub use crate::transpile_v0::Transpile;
+pub use crate::transpile::{transpile_python, TranspileOutput};
 
 use ctor::ctor;
-use std::result;
+use std::path;
 
-/// A type alias for `Result<T, serpent::SerpentError>`.
-pub type Result<T> = result::Result<T, SerpentError>;
+/// A type alias for `Result<T, serpent::SerpentError>`. All API functions
+/// return a SerpentError.
+pub type Result<T> = std::result::Result<T, SerpentError>;
 
-/// A string representing a piece of Python source code.
-pub enum PySource<'a> {
-    Program(&'a str, ProgramKind),
-}
-
-/// Represents if the Python program should be interpreted as runnable or as
-/// non-runnable (like a library).
+/// Enum for different kinds of Python programs: runnables and libraries.
+#[derive(PartialEq, Clone)]
 pub enum ProgramKind {
     /// Interpret the program as something runnable. Causes an "fn main()" entry
     /// point to be generated in Rust source code.
     Runnable,
     /// Interpret the program as not-runnable. Causes freestanding statements to
     /// be interpreted as const declarations.
-    NonRunnable,
+    Library,
 }
 
-// TODO: move as part of Transpile
 /// Transpiles given Python source to Rust.
 ///
 /// # Examples
@@ -61,18 +55,46 @@ pub enum ProgramKind {
 /// ```no_run
 /// # const DIR: &str = "examples/py/black_scholes/";
 /// use std::fs;
-/// use serpent::{transpile, PySource, ProgramKind};
+/// use serpent::transpile_str;
 ///
 /// # fn foo() -> serpent::Result<String> {
 ///     let source = fs::read_to_string("__init__.py")?;
 ///
-///     let result = transpile(PySource::Program(&source, ProgramKind::Runnable))?;
+///     let result = transpile_str(&source, true)?;
 ///     println!("Result:\n{}", &result);
-/// # Ok(result)
+/// #    Ok(result)
 /// # }
 /// ```
-pub fn transpile_v0(src: PySource) -> Result<String> {
-    transpile_v0::transpile_python(src).map_err(|e| SerpentError::Transpile("input".to_owned(), e))
+pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspileOutput> {
+    transpile::transpile_python(src, infer_main)
+}
+
+/// Transpiles a Python module from given directory to Rust.
+/// TODO: produce a project instead of a string.
+///
+/// Basic usage with `anyhow`.
+///
+/// ```
+/// # const DIR: &str = "examples/py/black_scholes/";
+/// use anyhow::{Context, Result};
+///
+/// fn main() -> Result<()> {
+///     let transpiled = serpent::transpile_module(DIR)
+///         .context(format!("unable to transpile module"))?;
+///
+///     println!("Transpiled Rust source code:\n{}", &transpiled);
+/// #    Ok(())
+/// }
+/// ```
+pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspileOutput> {
+    let source_module = crate::import_module(dir_path);
+    source_module?.transpile().map(|output| output)
+}
+
+pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspileOutput> {
+    let path = file_path.as_ref();
+    let source_file = crate::py_module::PyFile::from_path(path)?;
+    source_file.transpile().map(|output| output)
 }
 
 // Enable color backtraces in binaries, tests and examples.

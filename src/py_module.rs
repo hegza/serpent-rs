@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ffi, fs, io, path, result};
 
-use crate::{transpile_v0::TranspileOutput, SerpentError, Transpile};
+use crate::{transpile::TranspileOutput, SerpentError};
 use log::{info, trace};
 use thiserror::Error as ThisError;
 
@@ -14,7 +14,7 @@ pub type Result<T> = result::Result<T, SerpentError>;
 /// ```
 /// # const DIR: &str = "examples/py/black_scholes/";
 /// use anyhow::{Context, Result};
-/// use serpent::{transpile, Transpile, ProgramKind, PySource};
+/// use serpent::import_module;
 ///
 /// fn main() -> Result<()> {
 ///     let source_module = serpent::import_module(DIR);
@@ -30,19 +30,21 @@ pub fn import_module(dir_path: impl AsRef<path::Path>) -> Result<PyModule> {
     PyModule::from_dir_path(dir_path)
 }
 
-/// A buffer for messages concerning module import outcomes. Can be used to either inform the user
-/// about what has been transpiled, or the transpiler about what to do in further processing steps.
-/// This exists separately from logging and is meant to only report actionable items further down
+/// A buffer for messages concerning module import outcomes. Can be used to
+/// either inform the user about what has been transpiled, or the transpiler
+/// about what to do in further processing steps. This exists separately from
+/// logging and is meant to only report actionable items further down
 /// the chain of transpilation.
 type MessageBuffer = ();
 
 /// Represents a Python module or a package loaded from a directory or a file.
 #[derive(Debug)]
 pub struct PyModule {
-    /// A map of files by module path, for tracking Python imports and possible error backtrace.
+    /// A map of files by module path, for tracking Python imports and possible
+    /// error backtrace.
     sources: HashMap<String, PyFile>,
     /// Module path of root in `sources`.
-    has_root: bool,
+    root_mod: Option<String>,
     messages: MessageBuffer,
 }
 
@@ -65,27 +67,32 @@ impl PyModule {
         // ergo prefix must be ./mod/ or mod/ or /a/b/mod/
         let root_path_prefix = dir_path.as_ref().to_owned();
 
-        let mut has_root = false;
+        let mut root_mod_idx = None;
 
         // Check if a root module exists
         match py_files
             .iter()
-            .find(|de| de.path().file_stem().expect("no filename") == "__init__")
+            .enumerate()
+            .find(|&(_, de)| de.path().file_stem().expect("no filename") == "__init__")
         {
-            Some(_de) => {
+            Some((mod_idx, de)) => {
                 info!("__init__ module found in source, module is likely runnable");
-                has_root = true;
+                let root_path = de.path();
+                info!("Setting {:?} as root module", &root_path);
+                root_mod_idx = Some(mod_idx);
             }
             None => {
                 info!("__init__ module *not* found in source, module is likely a library");
             }
         }
 
+        let mut root_mod = None;
+
         // Construct the map of modules
         let sources = {
             let mut modules = HashMap::new();
 
-            for f in &py_files {
+            for (mod_idx, f) in py_files.iter().enumerate() {
                 let path = &f.path();
 
                 let relative_path_to_root = path
@@ -100,14 +107,17 @@ impl PyModule {
                     })
                     .collect::<Vec<&str>>()
                     .join(".");
-                let content = fs::read_to_string(path)?;
-                modules.insert(
-                    module_path,
-                    PyFile {
-                        path: path.clone(),
-                        content,
-                    },
-                );
+                let py_file = PyFile::from_path(path)?;
+
+                // Store key to the root module if detected
+                if let Some(root_idx) = root_mod_idx {
+                    if root_idx == mod_idx {
+                        root_mod = Some(module_path.clone());
+                    }
+                }
+
+                // Insert module file by module path "x.y.z"
+                modules.insert(module_path, py_file);
             }
 
             modules
@@ -115,9 +125,60 @@ impl PyModule {
 
         Ok(PyModule {
             sources,
-            has_root,
+            root_mod,
             messages: (),
         })
+    }
+
+    pub fn transpile(&self) -> Result<TranspileOutput> {
+        let mut rust_sources: Vec<String> = vec![];
+
+        // Transpile file-by-file
+        for (mod_path, file) in &self.sources {
+            let _is_root = match &self.root_mod {
+                Some(root_mod) if root_mod == mod_path => true,
+                _ => false,
+            };
+
+            info!("Transpiling {}", mod_path);
+            let t_result = file.transpile()?;
+
+            rust_sources.push(t_result.program);
+        }
+
+        let t_out = rust_sources.concat();
+        let transpiled = TranspileOutput { program: t_out };
+        Ok(transpiled)
+    }
+}
+
+impl PyFile {
+    pub fn from_path(path: impl AsRef<path::Path>) -> Result<PyFile> {
+        let path = path.as_ref();
+        let content = fs::read_to_string(path)?;
+
+        Ok(PyFile {
+            path: path.to_path_buf(),
+            content,
+        })
+    }
+
+    pub fn transpile(&self) -> Result<TranspileOutput> {
+        // HACK: interpret everything as non-runnable for now
+        // TODO: identify main() segment and interpret as a runnable file
+
+        let program =
+            crate::transpile::transpile_python(&self.content, false).map_err(|e| match e {
+                // Add path information to error
+                SerpentError::Transpile(mut transpile_error) => {
+                    transpile_error.filename = Some(self.path.to_string_lossy().to_string());
+                    transpile_error.into()
+                }
+                se => se,
+            })?;
+
+        let transpiled = program;
+        Ok(transpiled)
     }
 }
 
@@ -125,47 +186,6 @@ impl PyModule {
 pub enum ImportError {
     #[error("IO error")]
     Io(#[from] io::Error),
-}
-
-impl Transpile for PyModule {
-    fn transpile(&self) -> Result<TranspileOutput> {
-        let mut rust_sources: Vec<String> = vec![];
-
-        // Transpile file-by-file
-        for file in self.sources.values() {
-            let t_result = file.transpile()?;
-
-            rust_sources.push(t_result.out);
-        }
-
-        let t_out = rust_sources.concat();
-        let transpiled = TranspileOutput {
-            out: t_out,
-            messages: (),
-        };
-        Ok(transpiled)
-    }
-}
-
-impl Transpile for PyFile {
-    fn transpile(&self) -> Result<TranspileOutput> {
-        // HACK: interpret everything as non-runnable for now
-        // TODO: identify main() segment and interpret as a runnable file
-
-        let transpiled = crate::transpile_v0::transpile_python(crate::PySource::Program(
-            &self.content,
-            crate::ProgramKind::NonRunnable,
-        ))
-        .map_err(|e| {
-            crate::error::SerpentError::Transpile(self.path.to_string_lossy().to_string(), e)
-        })?;
-
-        let transpiled = TranspileOutput {
-            out: transpiled,
-            messages: (),
-        };
-        Ok(transpiled)
-    }
 }
 
 /// Python file extensions for in-directory detection.

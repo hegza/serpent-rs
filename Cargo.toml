@@ -18,7 +18,7 @@ path = "examples/transpile_black_scholes.rs"
 
 [dependencies]
 # Python AST
-rustpython-parser = { version = "0.1.1" }
+rustpython-parser = { version = "^0.1" }
 # `num-bigint` "^0.2" matching with `rustpython-parser` "0.1.1"
 num-bigint = "^0.2"
 
@@ -36,8 +36,14 @@ rustfmt = "^0.10"
 color-backtrace = "^0.3"
 ctor = "0.1.14"
 thiserror = "^1.0"
+# The new rustc ast auto-published from Rust, replaces syn mostly
+rustc-ap-rustc_ast = "673.0.0"
+itertools = "^0.9"
+# Let's try out codegen
+codegen = "0.1.3"
 
 [dev-dependencies]
 lazy_static = "^1.4"
 sourcefile = "^0.1"
 anyhow = "^1.0"
+test-case = "^1.0"
