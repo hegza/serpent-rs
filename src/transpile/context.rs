@@ -59,15 +59,17 @@ impl<'py_ast> AstContext<'py_ast> {
         let mut emit_placeholders = false;
 
         use super::config::MissingImplBehavior;
-        let unimplemented_handler: Box<dyn handler::UnimplementedAstNode> =
-            match cfg.on_missing_impl {
-                MissingImplBehavior::EmitDummy => {
-                    emit_placeholders = true;
-                    Box::new(handler::WarnOnUnimplemented {})
-                }
-                MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
-                MissingImplBehavior::Error => Box::new(handler::ListUnimplemented::new()),
-            };
+        let unimplemented_handler: Box<dyn handler::UnimplementedAstNode> = match cfg
+            .on_missing_impl
+        {
+            MissingImplBehavior::EmitDummy => {
+                emit_placeholders = true;
+                Box::new(handler::WarnOnUnimplemented {})
+            }
+            MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
+            MissingImplBehavior::ErrorAtAst => Box::new(handler::ListUnimplemented::new(false)),
+            MissingImplBehavior::ErrorAtCodegen => Box::new(handler::ListUnimplemented::new(true)),
+        };
 
         AstContext {
             source_nodes,

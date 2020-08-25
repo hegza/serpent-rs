@@ -15,14 +15,18 @@ pub enum MissingImplBehavior {
     /// Omit the missing item in the transpiled version, but report a warning
     /// with warn!()
     Omit,
-    /// Collect unimplemented items as errors and return the first one
-    Error,
+    /// Collect unimplemented Python AST -> Rust AST items as errors and return
+    /// the first one
+    ErrorAtAst,
+    /// Collect unimplemented Rust AST -> Rust source items as errors and return
+    /// the first one
+    ErrorAtCodegen,
 }
 
 impl Default for TranspileConfig {
     fn default() -> Self {
         TranspileConfig {
-            on_missing_impl: MissingImplBehavior::Error,
+            on_missing_impl: MissingImplBehavior::ErrorAtCodegen,
         }
     }
 }

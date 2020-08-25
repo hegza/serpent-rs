@@ -23,7 +23,9 @@ impl PrintContext {
                 Box::new(handler::WarnOnUnimplemented {})
             }
             MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
-            MissingImplBehavior::Error => Box::new(handler::ListUnimplementedExpand::new()),
+            MissingImplBehavior::ErrorAtAst | MissingImplBehavior::ErrorAtCodegen => {
+                Box::new(handler::ListUnimplementedExpand::new())
+            }
         };
 
         PrintContext {

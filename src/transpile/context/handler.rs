@@ -23,13 +23,15 @@ pub trait UnimplementedExpand {
 pub struct ListUnimplemented {
     items: Vec<String>,
     first: Option<Location>,
+    allow_errors: bool,
 }
 
 impl ListUnimplemented {
-    pub fn new() -> ListUnimplemented {
+    pub fn new(allow_errors: bool) -> ListUnimplemented {
         ListUnimplemented {
             items: vec![],
             first: None,
+            allow_errors,
         }
     }
 }
@@ -66,16 +68,20 @@ impl UnimplementedAstNode for ListUnimplemented {
             return Ok(());
         }
 
-        println!("Unimplemented items:");
+        println!("Unimplemented Python -> Rust items:");
         for item in &self.items {
             println!("\t{}", item);
         }
 
         // Return the first untranspiled node as error
-        Err(TranspileNodeError::Unimplemented {
-            location: self.first.clone(),
-            debug: self.items.first().unwrap().clone(),
-        })
+        if self.allow_errors {
+            Ok(())
+        } else {
+            Err(TranspileNodeError::Unimplemented {
+                location: self.first.clone(),
+                debug: self.items.first().unwrap().clone(),
+            })
+        }
     }
 }
 
