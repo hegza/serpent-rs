@@ -1,6 +1,11 @@
+mod util;
+
+use super::context::ImportKind;
 use crate::error::TranspileNodeError;
 use crate::transpile::{context::AstContext, python, rust};
 use py::Located;
+use rustc_ap_rustc_ast as rustc_ast;
+use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
 
 /// A type alias for `Result<T, serpent::error::TranspileNodeError>`.
@@ -118,15 +123,63 @@ fn visit_return(value: &Option<py::Expression>, ctx: &mut AstContext) {
     }
 }
 
-/// Visits a Python import statement.
+/// Visits each of the import symbols in a Python import statement.
 ///
 /// Emits a `use crate::...` for identified, local imports and stores
 /// unidentified, foreign imports for later processing
 fn visit_import(names: &Vec<py::ImportSymbol>, ctx: &mut AstContext) {
-    // TODO: figure out if the import symbol is A) a known local import, or B) a
-    // foreign import, then either A) create Rust `use` to match, B)
-    // `register_foreign_import() for later processing`
-    ctx.unimplemented_parameter("import", names);
+    for name in names {
+        visit_import_symbol(name, ctx);
+    }
+}
+
+/// Visits a Python import symbol with a symbol and an alias
+///
+/// Emits a `use crate::...` for identified, local imports and stores
+/// unidentified, foreign imports for later processing
+///
+/// TODO: merge Python import trees into Rust use trees instead of emitting a
+/// separate tree for each
+fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
+    // De-structure import symbol
+    let py::ImportSymbol { symbol, alias } = name;
+
+    // Local or foreign import?
+    let import_kind = ctx.identify_import(symbol);
+
+    let rust_node = match import_kind {
+        // Create a `use crate::...` for identified local import
+        ImportKind::Local => create_use_node(true, symbol, alias.as_ref()),
+        ImportKind::Foreign => create_use_node(false, symbol, alias.as_ref()),
+    };
+    ctx.emit(rust_node);
+}
+
+fn create_use_node(local: bool, symbol: &str, alias: Option<&String>) -> rust::NodeKind {
+    // Map Python alias into Rust Ident
+    let alias = alias.map(|s| util::ident(s));
+
+    // Construct Rust use tree
+
+    let mut segments = vec![];
+    if local {
+        segments.push(rs::PathSegment::from_ident(util::ident("crate")));
+    }
+    segments.push(rs::PathSegment::from_ident(util::ident(&symbol)));
+
+    let prefix = rs::Path {
+        span: util::span(),
+        segments,
+    };
+    let kind = rs::UseTreeKind::Simple(alias, util::node_id(), util::node_id());
+    let span = util::span();
+
+    let use_tree = rs::UseTree { prefix, kind, span };
+
+    let rust_item = rs::ItemKind::Use(P(use_tree));
+    let rust_node = rust::NodeKind::Item(rust_item);
+
+    rust_node
 }
 
 /*

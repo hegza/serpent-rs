@@ -25,11 +25,11 @@ mod py_module;
 mod transpile;
 
 pub use crate::error::{SerpentError, TranspileError};
-pub use crate::py_module::{import_module, ImportError, PyModule};
-pub use crate::transpile::{transpile_python, TranspileOutput};
+pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
-use std::path;
+use std::{fs, path};
+use transpile::transpile_module_dir;
 
 /// A type alias for `Result<T, serpent::SerpentError>`. All API functions
 /// return a SerpentError.
@@ -65,8 +65,8 @@ pub enum ProgramKind {
 /// #    Ok(result)
 /// # }
 /// ```
-pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspileOutput> {
-    transpile::transpile_python(src, infer_main)
+pub fn transpile_str(src: &str, infer_main: bool) -> Result<String> {
+    transpile::transpile_str(src, infer_main)
 }
 
 /// Transpiles a Python module from given directory to Rust.
@@ -86,15 +86,14 @@ pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspileOutput> {
 /// #    Ok(())
 /// }
 /// ```
-pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspileOutput> {
-    let source_module = crate::import_module(dir_path);
-    source_module?.transpile().map(|output| output)
+pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<Vec<(path::PathBuf, String)>> {
+    transpile_module_dir(dir_path)
 }
 
-pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspileOutput> {
+pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<String> {
     let path = file_path.as_ref();
-    let source_file = crate::py_module::PyFile::from_path(path)?;
-    source_file.transpile().map(|output| output)
+    let content = fs::read_to_string(path)?;
+    transpile_str(&content, false)
 }
 
 // Enable color backtraces in binaries, tests and examples.

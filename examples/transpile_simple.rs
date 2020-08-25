@@ -46,6 +46,6 @@ fn main() {
     println!("Source:\n{}", &source);
     let result = transpile_file(filename).unwrap();
     println!();
-    let view = SourceView(&result.program, Language::Rust, false);
+    let view = SourceView(&result, Language::Rust, false);
     println!("Result:\n{}", &view);
 }

@@ -46,7 +46,7 @@ pub enum SerpentError {
     Transpile(#[from] TranspileError),
     /// An error that occurred while expanding a Rust AST into Rust source code.
     #[error("Rust AST expansion error")]
-    Expand,
+    Expand(#[from] ExpandError),
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
@@ -62,7 +62,7 @@ pub struct TranspileError {
     pub location: Location,
     pub filename: Option<String>,
     pub line: String,
-    pub inner: TranspileNodeError,
+    pub source: TranspileNodeError,
 }
 
 impl SerpentError {
@@ -95,32 +95,30 @@ impl fmt::Display for TranspileError {
         if let Some(file) = &self.filename {
             write!(
                 f,
-                "Could not transpile line {}, column {}, in {}: `{}`. reason: {}",
+                "Could not transpile line {} column {}, in {}:{}",
                 self.location.row(),
                 self.location.column(),
                 file,
-                self.line,
-                self.inner
+                self.location.visualize(&self.line, "")
             )
         } else {
             write!(
                 f,
-                "Could not transpile line {}, column {}: `{}`, reason: {}",
+                "Could not transpile line {} column {}:\n\t`{}`",
                 self.location.row(),
                 self.location.column(),
-                self.line,
-                self.inner
+                self.line
             )
         }
     }
 }
 
+/// An error that occurred while transpiling a Python AST node into Rust.
 #[derive(ThisError, Debug)]
 pub enum TranspileNodeError {
-    /// An error that occurred while transpiling the Python AST into Rust. A
-    /// transform for this Python AST node was not implemented.
+    /// Transform for this Python AST node was not implemented.
     Unimplemented {
-        node: String,
+        debug: String,
         location: Option<Location>,
     },
 }
@@ -131,7 +129,7 @@ impl TranspileNodeError {
         location: Option<Location>,
     ) -> TranspileNodeError {
         TranspileNodeError::Unimplemented {
-            node: format!("{:?}", node),
+            debug: format!("{:?}", node),
             location,
         }
     }
@@ -153,7 +151,7 @@ impl TranspileNodeError {
             filename,
             location,
             line,
-            inner: self,
+            source: self,
         }
     }
 }
@@ -161,11 +159,17 @@ impl TranspileNodeError {
 impl fmt::Display for TranspileNodeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TranspileNodeError::Unimplemented { node, location } => match location {
-                // TODO: format location with {} / fmt::Display
-                Some(loc) => write!(f, "Unimplemented node: {:?} at {:?}", node, loc),
-                None => write!(f, "Unimplemented node: {:?}", node),
+            TranspileNodeError::Unimplemented { debug, location } => match location {
+                Some(loc) => write!(f, "Unimplemented node: {:?} at {}", debug, loc),
+                None => write!(f, "Unimplemented node: {:?}", debug),
             },
         }
     }
+}
+
+#[derive(ThisError, Debug)]
+pub enum ExpandError {
+    /// Fidelity print is not implemented for this item
+    #[error("no implementation for node: {0}")]
+    Unimplemented(String),
 }

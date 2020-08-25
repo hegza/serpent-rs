@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats as si
 
+
 """
 def euro_vanilla_call(S, K, T, r, sigma):
 
@@ -19,6 +20,7 @@ def euro_vanilla_call(S, K, T, r, sigma):
     return call
 """
 
+
 def euro_vanilla_put(S, K, T, r, sigma):
 
     # S: spot price
@@ -34,6 +36,7 @@ def euro_vanilla_put(S, K, T, r, sigma):
            S * si.norm.cdf(-d1, 0.0, 1.0))
 
     return put
+
 
 """
 def euro_vanilla(S, K, T, r, sigma, option='call'):

@@ -18,7 +18,10 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
             }
             '\n' => {
                 // Newline ends a comment
-                if let Some((location, content)) = comment {
+                if let Some((location, mut content)) = comment {
+                    // Also add the trailing newline to the comment
+                    content.push('\n');
+
                     comments.push(Located {
                         location,
                         node: content,

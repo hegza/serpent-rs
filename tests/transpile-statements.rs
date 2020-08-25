@@ -15,5 +15,5 @@ use test_case::test_case;
     include_str!("input/simple_multiline.rs");
     "simple multiline transpiles right")]
 fn transpile_runnable(stmt: &str) -> String {
-    transpile_str(stmt, true).unwrap().program
+    transpile_str(stmt, true).unwrap()
 }

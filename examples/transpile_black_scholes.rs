@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use serpent::transpile_module;
 use std::fmt;
 
 const DIR: &str = "examples/py/black_scholes/";
@@ -37,12 +38,12 @@ impl<'s> fmt::Display for SourceView<'s> {
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
-    let source_module = serpent::import_module(DIR);
-    let transpiled = source_module?
-        .transpile()
+    let transpiled = transpile_module(DIR)
         .context(format!("unable to transpile module from path: \"{}\"", DIR))?;
-    let program = SourceView(&transpiled.program, Language::Rust, true);
-    println!("Transpiled Rust source code:\n```rust\n{}\n```", program);
+    for t in transpiled {
+        let program = SourceView(&t.1, Language::Rust, true);
+        println!("Transpiled Rust source code for {:?}:\n{}", t.0, program);
+    }
 
     Ok(())
 }

@@ -4,6 +4,7 @@ import scipy.stats as si
 
 from black_scholes_ndp import euro_vanilla_put
 
+
 def main():
     put = euro_vanilla_put(50, 100, 1, 0.05, 0.25)
     print("put: " + str(put))
@@ -19,6 +20,5 @@ def main():
     print("result: " + str(result))
 
 
-if __name__ =="__main__":
+if __name__ == "__main__":
     main()
-
