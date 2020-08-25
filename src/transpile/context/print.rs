@@ -8,15 +8,21 @@ pub(crate) struct PrintContext {
     unimplemented_handler: Box<dyn handler::UnimplementedExpand>,
     /// Produced Rust source code
     target: String,
+    emit_placeholders: bool,
 }
 
 impl PrintContext {
     pub fn new(cfg: &TranspileConfig) -> PrintContext {
+        let mut emit_placeholders = false;
+
         use crate::transpile::config::MissingImplBehavior;
         let unimplemented_handler: Box<dyn handler::UnimplementedExpand> = match cfg.on_missing_impl
         {
-            MissingImplBehavior::EmitDummy => unimplemented!(),
-            MissingImplBehavior::Omit => Box::new(handler::OmitUnimplemented {}),
+            MissingImplBehavior::EmitDummy => {
+                emit_placeholders = true;
+                Box::new(handler::WarnOnUnimplemented {})
+            }
+            MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
             MissingImplBehavior::Error => Box::new(handler::ListUnimplementedExpand::new()),
         };
 
@@ -24,12 +30,16 @@ impl PrintContext {
             unimplemented_handler,
             idx: 0,
             target: String::new(),
+            emit_placeholders,
         }
     }
     pub fn unimplemented<T>(&mut self, item: &T)
     where
         T: Debug,
     {
+        if self.emit_placeholders {
+            self.emit(&format!("// T-TODO: rs::{:?}", item));
+        }
         self.unimplemented_handler.handle_unimplemented(&item);
     }
 

@@ -10,12 +10,12 @@ pub struct TranspileConfig {
 /// translation item is encountered.
 #[derive(Clone, Debug)]
 pub enum MissingImplBehavior {
-    /// Emit a placeholder that the user can correct post-config
+    /// Emit a placeholder based on original source that the user can correct
     EmitDummy,
     /// Omit the missing item in the transpiled version, but report a warning
     /// with warn!()
     Omit,
-    /// Collect unimplemented items as errors and return
+    /// Collect unimplemented items as errors and return the first one
     Error,
 }
 

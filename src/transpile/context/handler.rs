@@ -79,9 +79,9 @@ impl UnimplementedAstNode for ListUnimplemented {
     }
 }
 
-pub struct OmitUnimplemented {}
+pub struct WarnOnUnimplemented {}
 
-impl UnimplementedAstNode for OmitUnimplemented {
+impl UnimplementedAstNode for WarnOnUnimplemented {
     fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location) {
         warn!("Unimplemented on {}: {:?}", location, item);
     }
@@ -103,7 +103,7 @@ impl UnimplementedAstNode for OmitUnimplemented {
     }
 }
 
-impl UnimplementedExpand for OmitUnimplemented {
+impl UnimplementedExpand for WarnOnUnimplemented {
     fn handle_unimplemented(&mut self, item: &dyn Debug) {
         warn!("Unimplemented: {:?}", item);
     }

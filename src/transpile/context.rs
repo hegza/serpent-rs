@@ -47,6 +47,7 @@ pub(crate) struct AstContext<'py_ast> {
     unimplemented_handler: Box<dyn handler::UnimplementedAstNode>,
     /// The created, transpiled Rust AST nodes in order of creation.
     rust_nodes: Vec<rust::NodeKind>,
+    emit_placeholders: bool,
 }
 
 impl<'py_ast> AstContext<'py_ast> {
@@ -55,11 +56,16 @@ impl<'py_ast> AstContext<'py_ast> {
         source_nodes: &'py_ast [python::NodeKind],
         cfg: &TranspileConfig,
     ) -> AstContext<'py_ast> {
+        let mut emit_placeholders = false;
+
         use super::config::MissingImplBehavior;
         let unimplemented_handler: Box<dyn handler::UnimplementedAstNode> =
             match cfg.on_missing_impl {
-                MissingImplBehavior::EmitDummy => unimplemented!(),
-                MissingImplBehavior::Omit => Box::new(handler::OmitUnimplemented {}),
+                MissingImplBehavior::EmitDummy => {
+                    emit_placeholders = true;
+                    Box::new(handler::WarnOnUnimplemented {})
+                }
+                MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
                 MissingImplBehavior::Error => Box::new(handler::ListUnimplemented::new()),
             };
 
@@ -69,6 +75,7 @@ impl<'py_ast> AstContext<'py_ast> {
             rust_nodes: Vec::new(),
             relative_mod_symbols,
             unimplemented_handler,
+            emit_placeholders,
         }
     }
 
@@ -113,6 +120,9 @@ impl<'py_ast> AstContext<'py_ast> {
     where
         T: Debug,
     {
+        if self.emit_placeholders {
+            self.emit(rust::NodeKind::Comment(format!(" T-TODO: py::{:?}", item)));
+        }
         self.unimplemented_handler
             .handle_unimplemented_item(&item.node, &item.location);
     }

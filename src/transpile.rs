@@ -14,6 +14,7 @@ use itertools::Itertools;
 use log::info;
 use parser_ext::parse_comments;
 use python::Node;
+use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
 use std::{fs, path};
 
@@ -83,20 +84,23 @@ fn transpile_file(path: &path::PathBuf, ctx: &mut ProgramContext) -> Result<Stri
 
     // Transform the Python AST into a Rust AST
     let cfg = TranspileConfig::default();
-    let mut ast_ctx = AstContext::new(&relative_mod_symbols, &ast, &cfg);
-    for node in &ast {
-        node.transpile(&mut ast_ctx).map_err(|inner| {
+    let out_str: Result<String, SerpentError> = with_default_session_globals(|| {
+        let mut ast_ctx = AstContext::new(&relative_mod_symbols, &ast, &cfg);
+        for node in &ast {
+            node.transpile(&mut ast_ctx).map_err(|inner| {
+                inner.with_source(&content, Some(path.to_string_lossy().to_string()))
+            })?;
+        }
+
+        let rust_ast = ast_ctx.finish().map_err(|inner| {
             inner.with_source(&content, Some(path.to_string_lossy().to_string()))
         })?;
-    }
-    let rust_ast = ast_ctx
-        .finish()
-        .map_err(|inner| inner.with_source(&content, Some(path.to_string_lossy().to_string())))?;
+
+        codegen::fidelity_print(&rust_ast, &cfg).map_err(|inner| SerpentError::from(inner))
+    });
 
     // Print the Rust AST as code
-    let out_str = codegen::fidelity_print(&rust_ast, &cfg)?;
-
-    Ok(out_str)
+    Ok(out_str?)
 }
 
 fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, SerpentError> {
