@@ -8,6 +8,7 @@ pub trait UnimplementedAstNode {
     fn handle_unimplemented_parameter(
         &mut self,
         item_name: &str,
+        parameter_name: &str,
         parameter: &dyn Debug,
         location: &Location,
     );
@@ -49,12 +50,13 @@ impl UnimplementedAstNode for ListUnimplemented {
     fn handle_unimplemented_parameter(
         &mut self,
         item_name: &str,
+        parameter_name: &str,
         parameter: &dyn Debug,
         location: &Location,
     ) {
         self.items.push(format!(
-            "{}: item `{}` for parameter {:?}",
-            location, item_name, parameter
+            "{}: item `{}` for parameter `{}` with value {:?}",
+            location, item_name, parameter_name, parameter
         ));
 
         // Track the first untranspiled instance for returned error
@@ -95,12 +97,13 @@ impl UnimplementedAstNode for WarnOnUnimplemented {
     fn handle_unimplemented_parameter(
         &mut self,
         item_name: &str,
+        parameter_name: &str,
         parameter: &dyn Debug,
         location: &Location,
     ) {
         warn!(
-            "Unimplemented on {}: item `{}` for parameter {:?}",
-            location, item_name, parameter,
+            "Unimplemented on {}: item `{}` for parameter `{}` with value {:?}",
+            location, item_name, parameter_name, parameter,
         );
     }
 

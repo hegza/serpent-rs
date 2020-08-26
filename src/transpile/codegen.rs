@@ -18,6 +18,9 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
             NodeKind::Item(item) => visit_item(item, &mut ctx),
             NodeKind::Newline => ctx.emit("\n"),
             NodeKind::Comment(content) => ctx.emit(&format!("//{}", content)),
+            NodeKind::ExtendedItem(_) => unimplemented!(),
+            // Statements should not occur at top-level
+            NodeKind::Stmt(_) => unimplemented!(),
         }
 
         ctx.advance();

@@ -26,6 +26,7 @@ num-bigint = "^0.2"
 rustc-ap-rustc_ast = "673.0.0"
 # Dependencies of rustc_ast "673.0.0"
 rustc-ap-rustc_span = "673.0.0"
+rustc-ap-rustc_data_structures = "673.0.0"
 
 derive_deref = "^1.1"
 log = "^0.4"

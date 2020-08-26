@@ -3,10 +3,13 @@ mod print;
 
 pub(crate) use print::PrintContext;
 
+use super::ast_to_ast::dummy;
 use super::{config::TranspileConfig, python};
 use crate::{error::TranspileNodeError, transpile::rust, PyModule};
 use log::trace;
 use python::Node;
+use rustc_ap_rustc_ast::ast as rs;
+use rustc_ap_rustc_ast::ptr::P;
 use rustpython_parser::ast::Located;
 use std::fmt::Debug;
 
@@ -48,6 +51,9 @@ pub(crate) struct AstContext<'py_ast> {
     /// The created, transpiled Rust AST nodes in order of creation.
     rust_nodes: Vec<rust::NodeKind>,
     emit_placeholders: bool,
+    // `depth` and `block` help implement recursing into blocks
+    depth: usize,
+    block: Option<Vec<rust::NodeKind>>,
 }
 
 impl<'py_ast> AstContext<'py_ast> {
@@ -78,6 +84,8 @@ impl<'py_ast> AstContext<'py_ast> {
             relative_mod_symbols,
             unimplemented_handler,
             emit_placeholders,
+            depth: 0,
+            block: None,
         }
     }
 
@@ -88,7 +96,44 @@ impl<'py_ast> AstContext<'py_ast> {
 
     /// Call to emit a transpiled Rust AST node.
     pub fn emit(&mut self, rust_node: rust::NodeKind) {
-        self.rust_nodes.push(rust_node);
+        if self.depth == 0 {
+            self.rust_nodes.push(rust_node);
+        } else {
+            panic!()
+        }
+    }
+
+    /// Recurse into a block, eg. in a function
+    pub fn start_block(&mut self) {
+        self.depth += 1;
+        self.block = Some(Vec::new());
+    }
+
+    /// Finish recursion into a block and return the block
+    pub fn finish_block(&mut self) -> Option<P<rs::Block>> {
+        self.depth -= 1;
+
+        let nodes = self
+            .block
+            .take()
+            .expect("finish_block called without respective start_block")
+            .into_iter();
+
+        let mut stmts = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            match node {
+                rust::NodeKind::Stmt(stmt) => stmts.push(stmt),
+                _ => self.unimplemented_parameter("block", "node", &node),
+            }
+        }
+
+        let block = rs::Block {
+            stmts,
+            id: dummy::node_id(),
+            rules: rs::BlockCheckMode::Default,
+            span: dummy::span(),
+        };
+        Some(P(block))
     }
 
     pub fn identify_import(&self, symbol: &str) -> ImportKind {
@@ -129,14 +174,22 @@ impl<'py_ast> AstContext<'py_ast> {
             .handle_unimplemented_item(&item.node, &item.location);
     }
 
-    /// Notifies that the given `branch` of an item is not implemented.
-    pub fn unimplemented_parameter<T>(&mut self, item_name: &str, parameter: &T)
-    where
+    /// Notifies that the given `branch` of a visit_{item} is not implemented.
+    pub fn unimplemented_parameter<T>(
+        &mut self,
+        item_name: &str,
+        parameter_name: &str,
+        parameter_value: &T,
+    ) where
         T: Debug,
     {
         let location = self.current_source_node().location().clone();
-        self.unimplemented_handler
-            .handle_unimplemented_parameter(item_name, parameter, &location);
+        self.unimplemented_handler.handle_unimplemented_parameter(
+            item_name,
+            parameter_name,
+            parameter_value,
+            &location,
+        );
     }
 
     fn current_source_node(&self) -> &python::NodeKind {

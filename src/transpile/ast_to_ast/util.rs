@@ -1,5 +1,7 @@
-use rustc_ap_rustc_ast::node_id;
+use rustc_ap_rustc_ast::ast;
 use rustc_ap_rustc_span::{symbol, Span, DUMMY_SP};
+
+use super::dummy;
 
 /// Constructs an interned string for the identifier
 pub fn ident(from: &str) -> symbol::Ident {
@@ -7,12 +9,16 @@ pub fn ident(from: &str) -> symbol::Ident {
     symbol::Ident::with_dummy_span(name)
 }
 
-/// Constructs a dummy node id using NodeId::MAX
-pub fn node_id() -> node_id::NodeId {
-    node_id::NodeId::MAX
-}
-
-/// Constructs a dummy span using DUMMY_SP
-pub fn span() -> Span {
-    DUMMY_SP
+/// Constructs a pattern from string
+pub fn str_to_pat(from: &str) -> ast::Pat {
+    let pat = ast::PatKind::Ident(
+        ast::BindingMode::ByValue(ast::Mutability::Not),
+        ident(from),
+        None,
+    );
+    ast::Pat {
+        id: dummy::node_id(),
+        kind: pat,
+        span: dummy::span(),
+    }
 }
