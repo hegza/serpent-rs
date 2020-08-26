@@ -8,6 +8,7 @@ use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::ast as rs;
 use rustc_ast::ptr::P;
+use rustc_ast::token;
 
 /// Something that can be printed into Rust source code. Attempts to match
 /// whatever original representation as closely as possible.
@@ -101,16 +102,24 @@ impl FidelityPrint for rs::FnHeader {
 
         let mut qualifiers = Vec::new();
         match unsafety {
-            rs::Unsafe::Yes(_) => qualifiers.push("unsafe"),
+            rs::Unsafe::Yes(_) => qualifiers.push("unsafe".to_string()),
             rs::Unsafe::No => {}
         }
         match asyncness {
-            rs::Async::Yes { .. } => qualifiers.push("async"),
+            rs::Async::Yes { .. } => qualifiers.push("async".to_string()),
             rs::Async::No => {}
         }
         match constness {
-            rs::Const::Yes(_) => qualifiers.push("const"),
+            rs::Const::Yes(_) => qualifiers.push("const".to_string()),
             rs::Const::No => {}
+        }
+        match ext {
+            rs::Extern::None => {}
+            rs::Extern::Implicit => qualifiers.push("extern".to_string()),
+            rs::Extern::Explicit(s) => {
+                let s = format!("extern {}", s.fidelity_print(ctx));
+                qualifiers.push(s)
+            }
         }
 
         qualifiers.join(" ")
@@ -138,7 +147,21 @@ impl FidelityPrint for rs::Param {
 impl FidelityPrint for rs::Pat {
     fn fidelity_print(&self, ctx: &PrintContext) -> String {
         match &self.kind {
-            rs::PatKind::Ident(mode, ident, pat) => ident.fidelity_print(ctx),
+            rs::PatKind::Ident(mode, ident, pat) => {
+                if pat.is_some() {
+                    unimplemented!()
+                };
+
+                let bmode = match mode {
+                    rs::BindingMode::ByRef(rs::Mutability::Mut) => "ref mut ",
+                    rs::BindingMode::ByRef(rs::Mutability::Not) => "ref ",
+                    rs::BindingMode::ByValue(rs::Mutability::Mut) => "mut ",
+                    rs::BindingMode::ByValue(rs::Mutability::Not) => "",
+                };
+                let binding = ident.fidelity_print(ctx);
+                // ef. "ref mut binding"
+                format!("{}{}", bmode, binding)
+            }
             _ => ctx.unimplemented_print(self),
         }
     }
@@ -178,5 +201,24 @@ impl FidelityPrint for rs::StmtKind {
             rs::StmtKind::Empty => ctx.unimplemented_print(self),
             rs::StmtKind::MacCall(_) => ctx.unimplemented_print(self),
         }
+    }
+}
+
+impl FidelityPrint for rs::StrLit {
+    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+        self.as_lit().fidelity_print(ctx)
+    }
+}
+
+impl FidelityPrint for rs::Lit {
+    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+        self.token.fidelity_print(ctx)
+    }
+}
+
+impl FidelityPrint for token::Lit {
+    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+        // HACK: this maybe produces what we want; otherwise `match self.kind`
+        self.symbol.to_string()
     }
 }
