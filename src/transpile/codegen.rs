@@ -3,12 +3,10 @@ use super::{
     context::{PrintContext, RustAst},
 };
 use crate::{error::ExpandError, transpile::rust};
-use codegen as cg;
 use itertools::Itertools;
 use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::ast as rs;
-use rustc_ast::ptr::P;
 
 pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ExpandError> {
     // Construct a transpiled program by fidelity printing the Rust AST
@@ -112,7 +110,7 @@ impl FidelityPrint for rs::PathSegment {
 
 impl FidelityPrint for rustc_ap_rustc_span::symbol::Ident {
     // NOTE: needs to lock the string interner
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, _ctx: &PrintContext) -> String {
         self.to_string()
     }
 }

@@ -1,6 +1,5 @@
 use rustc_ap_rustc_ast::node_id;
 use rustc_ap_rustc_span::{symbol, Span, DUMMY_SP};
-use std::sync::Mutex;
 
 /// Constructs an interned string for the identifier
 pub fn ident(from: &str) -> symbol::Ident {

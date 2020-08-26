@@ -5,9 +5,9 @@ pub(crate) use print::PrintContext;
 
 use super::{config::TranspileConfig, python};
 use crate::{error::TranspileNodeError, transpile::rust, PyModule};
-use log::{trace, warn};
+use log::trace;
 use python::Node;
-use rustpython_parser::{ast::Located, location::Location};
+use rustpython_parser::ast::Located;
 use std::fmt::Debug;
 
 pub(crate) type RustAst = Vec<rust::NodeKind>;
