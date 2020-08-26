@@ -43,7 +43,7 @@ pub fn transpile_str(src: &str, infer_main: bool) -> Result<String, SerpentError
         .finish()
         .map_err(|inner| inner.with_source(&src, None))?;
 
-    let out_str = codegen::fidelity_print(&rust_ast, &cfg)?;
+    let out_str = codegen::ast_to_rust(&rust_ast, &cfg)?;
 
     Ok(out_str)
 }
@@ -96,7 +96,7 @@ fn transpile_file(path: &path::PathBuf, ctx: &mut ProgramContext) -> Result<Stri
             inner.with_source(&content, Some(path.to_string_lossy().to_string()))
         })?;
 
-        codegen::fidelity_print(&rust_ast, &cfg).map_err(|inner| SerpentError::from(inner))
+        codegen::ast_to_rust(&rust_ast, &cfg).map_err(|inner| SerpentError::from(inner))
     });
 
     // Print the Rust AST as code

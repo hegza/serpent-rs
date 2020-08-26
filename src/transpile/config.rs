@@ -26,7 +26,7 @@ pub enum MissingImplBehavior {
 impl Default for TranspileConfig {
     fn default() -> Self {
         TranspileConfig {
-            on_missing_impl: MissingImplBehavior::ErrorAtCodegen,
+            on_missing_impl: MissingImplBehavior::ErrorAtAst,
         }
     }
 }

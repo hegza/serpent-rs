@@ -45,6 +45,17 @@ impl PrintContext {
         self.unimplemented_handler.handle_unimplemented(&item);
     }
 
+    pub fn unimplemented_print<T>(&self, item: &T) -> String
+    where
+        T: Debug,
+    {
+        if self.emit_placeholders {
+            format!("/* T-TODO: rs::{:?} */", item)
+        } else {
+            "".to_owned()
+        }
+    }
+
     pub fn advance(&mut self) {
         self.idx += 1;
     }
