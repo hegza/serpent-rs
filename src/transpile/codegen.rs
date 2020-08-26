@@ -1,12 +1,16 @@
+mod fidelity_print;
+
 use super::{
     config::TranspileConfig,
     context::{PrintContext, RustAst},
 };
 use crate::{error::ExpandError, transpile::rust};
+use fidelity_print::{FidelityPrint, FnSignature};
 use itertools::Itertools;
 use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::ast as rs;
+use rustc_ast::ptr::P;
 
 pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ExpandError> {
     // Construct a transpiled program by fidelity printing the Rust AST
@@ -15,10 +19,10 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
         use rust::NodeKind;
 
         match rust_node {
-            NodeKind::Item(item) => visit_item(item, &mut ctx),
+            NodeKind::Item(item) => visit_item(None, item, &mut ctx),
+            NodeKind::ExtendedItem(item) => visit_item_trait(item, &mut ctx),
             NodeKind::Newline => ctx.emit("\n"),
             NodeKind::Comment(content) => ctx.emit(&format!("//{}", content)),
-            NodeKind::ExtendedItem(_) => unimplemented!(),
             // Statements should not occur at top-level
             NodeKind::Stmt(_) => unimplemented!(),
         }
@@ -30,13 +34,20 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
 
 // <!-- Visitor implementations, code emission here -->
 
-fn visit_item(item: &rs::ItemKind, ctx: &mut PrintContext) {
+fn visit_item(name: Option<&str>, item: &rs::ItemKind, ctx: &mut PrintContext) {
     match item {
         rs::ItemKind::ExternCrate(_) => ctx.unimplemented(item),
         rs::ItemKind::Use(use_tree) => ctx.emit(&use_tree.fidelity_print(ctx)),
         rs::ItemKind::Static(_, _, _) => ctx.unimplemented(item),
         rs::ItemKind::Const(_, _, _) => ctx.unimplemented(item),
-        rs::ItemKind::Fn(_, _, _, _) => ctx.unimplemented(item),
+        rs::ItemKind::Fn(defaultness, fn_sig, generics, block) => visit_fn(
+            name.expect("function must have a name"),
+            defaultness,
+            fn_sig,
+            generics,
+            block,
+            ctx,
+        ),
         rs::ItemKind::Mod(_) => ctx.unimplemented(item),
         rs::ItemKind::ForeignMod(_) => ctx.unimplemented(item),
         rs::ItemKind::GlobalAsm(_) => ctx.unimplemented(item),
@@ -61,59 +72,66 @@ fn visit_item(item: &rs::ItemKind, ctx: &mut PrintContext) {
     }
 }
 
-// <!-- formatting and print implementations here -->
+fn visit_item_trait(item: &rs::Item, ctx: &mut PrintContext) {
+    let rs::Item {
+        attrs,
+        id,
+        span,
+        vis,
+        /// The name of the item.
+        /// It might be a dummy name in case of anonymous items.
+        ident,
 
-/// Something that can be printed into Rust source code. Attempts to match
-/// whatever original representation as closely as possible.
-pub(crate) trait FidelityPrint {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String;
+        kind,
+
+        /// Original tokens this item was parsed from. This isn't necessarily
+        /// available for all items, although over time more and more items
+        /// should have this be `Some`. Right now this is primarily used
+        /// for procedural macros, notably custom attributes.
+        ///
+        /// Note that the tokens here do not include the outer attributes, but
+        /// will include inner attributes.
+        tokens,
+    } = item;
+
+    visit_item(Some(&ident.to_string()), kind, ctx);
 }
 
-impl FidelityPrint for rs::UseTree {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
-        let prefix = self.prefix.fidelity_print(ctx);
+fn visit_fn(
+    name: &str,
+    defaultness: &rs::Defaultness,
+    fn_sig: &rs::FnSig,
+    generics: &rs::Generics,
+    block: &Option<P<rs::Block>>,
+    ctx: &mut PrintContext,
+) {
+    // Emit signature
+    let signature = FnSignature(name, fn_sig, generics);
+    ctx.emit(&signature.fidelity_print(ctx));
 
-        let path = match self.kind {
-            rs::UseTreeKind::Simple(alias, _, _) => match alias {
-                None => format!("{prefix}", prefix = prefix),
-                Some(alias) => format!("{prefix} as {alias}", prefix = prefix, alias = alias),
-            },
-            rs::UseTreeKind::Nested(_) => ctx.unimplemented_print(&self.kind),
-            rs::UseTreeKind::Glob => format!("{prefix}::*", prefix = prefix),
-        };
+    if let Some(block) = block {
+        // Hit a space between a function signature and it's block
+        ctx.emit(" ");
 
-        format!("use {};\n", path)
-    }
-}
+        // Start a block
+        ctx.start_block();
 
-impl FidelityPrint for rs::Path {
-    // Join paths like `seg::seg`
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
-        self.segments
-            .iter()
-            .map(|seg| seg.fidelity_print(ctx))
-            .join("::")
-    }
-}
-
-impl FidelityPrint for rs::PathSegment {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
-        // Type / lifetime parameters attached to the path
-        let tl_parameters = &self.args;
-        if tl_parameters.is_some() {
-            warn!(
-                "Time / lifetime parameters not implemented (at node: {:?})",
-                self
-            )
+        // Emit statements in block
+        for stmt in &block.stmts {
+            let mut stmt_str = stmt.fidelity_print(ctx);
+            // Add a newline to each statement
+            stmt_str.push('\n');
+            ctx.emit(&stmt_str);
         }
 
-        self.ident.fidelity_print(ctx)
-    }
-}
+        // Finish block
+        ctx.finish_block();
 
-impl FidelityPrint for rustc_ap_rustc_span::symbol::Ident {
-    // NOTE: needs to lock the string interner
-    fn fidelity_print(&self, _ctx: &PrintContext) -> String {
-        self.to_string()
+        // Hit a newline after finishing a function block
+        ctx.emit("\n");
+    }
+    // no block
+    else {
+        ctx.emit(";");
     }
 }

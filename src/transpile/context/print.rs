@@ -9,6 +9,7 @@ pub(crate) struct PrintContext {
     /// Produced Rust source code
     target: String,
     emit_placeholders: bool,
+    depth: usize,
 }
 
 impl PrintContext {
@@ -33,6 +34,7 @@ impl PrintContext {
             idx: 0,
             target: String::new(),
             emit_placeholders,
+            depth: 0,
         }
     }
     pub fn unimplemented<T>(&mut self, item: &T)
@@ -56,13 +58,35 @@ impl PrintContext {
         }
     }
 
+    /// Starts a block, printing '{', then recursing deeper
+    pub fn start_block(&mut self) {
+        self.emit("{");
+        self.depth += 1;
+    }
+
+    /// Starts a block, recursing out first, then printing printing '}'
+    pub fn finish_block(&mut self) {
+        self.depth -= 1;
+        self.emit("}");
+    }
+
     pub fn advance(&mut self) {
         self.idx += 1;
     }
 
     /// Call to emit transpiled Rust source code.
     pub fn emit(&mut self, rust: &str) {
-        self.target.push_str(rust);
+        if self.depth == 0 {
+            self.target.push_str(rust);
+        } else {
+            // Chain indentations and then add statement
+            self.target.push_str(
+                &std::iter::repeat("    ")
+                    .take(self.depth)
+                    .chain(std::iter::once(rust))
+                    .collect::<String>(),
+            );
+        }
     }
 
     /// Call to emit transpiled Rust source code from the transpiled Rust AST.
