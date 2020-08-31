@@ -27,6 +27,7 @@ impl PrintContext {
             MissingImplBehavior::ErrorAtAst | MissingImplBehavior::ErrorAtCodegen => {
                 Box::new(handler::ListUnimplementedExpand::new())
             }
+            MissingImplBehavior::PanicImmediately => Box::new(handler::AlwaysPanic {}),
         };
 
         PrintContext {

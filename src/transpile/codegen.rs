@@ -16,15 +16,13 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
     // Construct a transpiled program by fidelity printing the Rust AST
     let mut ctx = PrintContext::new(cfg);
     for rust_node in ast {
-        use rust::NodeKind;
-
         match rust_node {
-            NodeKind::Item(item) => visit_item(None, item, &mut ctx),
-            NodeKind::ExtendedItem(item) => visit_item_trait(item, &mut ctx),
-            NodeKind::Newline => ctx.emit("\n"),
-            NodeKind::Comment(content) => ctx.emit(&format!("//{}", content)),
+            rust::NodeKind::Item(item) => visit_item(None, item, &mut ctx),
+            rust::NodeKind::ExtendedItem(item) => visit_item_trait(item, &mut ctx),
             // Statements should not occur at top-level
-            NodeKind::Stmt(_) => unimplemented!(),
+            rust::NodeKind::Stmt(_) | rust::NodeKind::ExtendedStmt(_) => unimplemented!(),
+            rust::NodeKind::Newline => ctx.emit("\n"),
+            rust::NodeKind::Comment(content) => ctx.emit(&format!("//{}", content)),
         }
 
         ctx.advance();

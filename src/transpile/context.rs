@@ -48,12 +48,13 @@ pub(crate) struct AstContext<'py_ast> {
     // Other local module symbols relative to the source module of this AST
     relative_mod_symbols: &'py_ast [String],
     unimplemented_handler: Box<dyn handler::UnimplementedAstNode>,
-    /// The created, transpiled Rust AST nodes in order of creation.
-    rust_nodes: Vec<rust::NodeKind>,
     emit_placeholders: bool,
     // `depth` and `block` help implement recursing into blocks
     depth: usize,
-    block: Option<Vec<rust::NodeKind>>,
+    /// The created, transpiled Rust AST nodes in order of creation, organized
+    /// by current depth. Blocks get removed from this Vec after they're
+    /// finished and attached to their top-level nodes.
+    block_recurse: Vec<Vec<rust::NodeKind>>,
 }
 
 impl<'py_ast> AstContext<'py_ast> {
@@ -75,17 +76,17 @@ impl<'py_ast> AstContext<'py_ast> {
             MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
             MissingImplBehavior::ErrorAtAst => Box::new(handler::ListUnimplemented::new(false)),
             MissingImplBehavior::ErrorAtCodegen => Box::new(handler::ListUnimplemented::new(true)),
+            MissingImplBehavior::PanicImmediately => Box::new(handler::AlwaysPanic {}),
         };
 
         AstContext {
             source_nodes,
             node_idx: 0,
-            rust_nodes: Vec::new(),
             relative_mod_symbols,
             unimplemented_handler,
             emit_placeholders,
             depth: 0,
-            block: None,
+            block_recurse: vec![Vec::new()],
         }
     }
 
@@ -96,17 +97,13 @@ impl<'py_ast> AstContext<'py_ast> {
 
     /// Call to emit a transpiled Rust AST node.
     pub fn emit(&mut self, rust_node: rust::NodeKind) {
-        if self.depth == 0 {
-            self.rust_nodes.push(rust_node);
-        } else {
-            panic!()
-        }
+        self.block_recurse[self.depth].push(rust_node);
     }
 
     /// Recurse into a block, eg. in a function
     pub fn start_block(&mut self) {
         self.depth += 1;
-        self.block = Some(Vec::new());
+        self.block_recurse.push(Vec::new());
     }
 
     /// Finish recursion into a block and return the block
@@ -114,15 +111,15 @@ impl<'py_ast> AstContext<'py_ast> {
         self.depth -= 1;
 
         let nodes = self
-            .block
-            .take()
+            .block_recurse
+            .pop()
             .expect("finish_block called without respective start_block")
             .into_iter();
 
         let mut stmts = Vec::with_capacity(nodes.len());
         for node in nodes {
             match node {
-                rust::NodeKind::Stmt(stmt) => stmts.push(stmt),
+                rust::NodeKind::ExtendedStmt(stmt) => stmts.push(stmt),
                 _ => self.unimplemented_parameter("block", "node", &node),
             }
         }
@@ -159,7 +156,14 @@ impl<'py_ast> AstContext<'py_ast> {
         // Report AST-to-AST transpilation errors
         self.unimplemented_handler.report()?;
 
-        Ok(self.rust_nodes)
+        if self.depth != 0
+            || self.block_recurse.len() != 1
+            || self.depth + 1 != self.block_recurse.len()
+        {
+            Err(TranspileNodeError::UnresolvedBlock(self.depth))
+        } else {
+            Ok(self.block_recurse.into_iter().nth(0).unwrap())
+        }
     }
 
     /// Notifies that the given `item` is not implemented.
@@ -190,6 +194,15 @@ impl<'py_ast> AstContext<'py_ast> {
             parameter_value,
             &location,
         );
+    }
+
+    /// Like `unimplemented_item`, but returns a wildcard pattern as placeholder
+    pub fn unimplemented_pat<T>(&mut self, pat: &Located<T>) -> rs::PatKind
+    where
+        T: Debug,
+    {
+        self.unimplemented_item(pat);
+        rs::PatKind::Wild
     }
 
     fn current_source_node(&self) -> &python::NodeKind {

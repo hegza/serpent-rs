@@ -11,14 +11,17 @@ pub fn ident(from: &str) -> symbol::Ident {
 
 /// Constructs a pattern from string
 pub fn str_to_pat(from: &str) -> ast::Pat {
-    let pat = ast::PatKind::Ident(
+    ast::Pat {
+        id: dummy::node_id(),
+        kind: str_to_pat_kind(from),
+        span: dummy::span(),
+    }
+}
+
+pub fn str_to_pat_kind(from: &str) -> ast::PatKind {
+    ast::PatKind::Ident(
         ast::BindingMode::ByValue(ast::Mutability::Not),
         ident(from),
         None,
-    );
-    ast::Pat {
-        id: dummy::node_id(),
-        kind: pat,
-        span: dummy::span(),
-    }
+    )
 }

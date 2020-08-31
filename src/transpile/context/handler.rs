@@ -149,3 +149,42 @@ impl UnimplementedExpand for ListUnimplementedExpand {
         Err(ExpandError::Unimplemented(self.0.first().unwrap().clone()))
     }
 }
+
+pub struct AlwaysPanic {}
+
+impl UnimplementedExpand for AlwaysPanic {
+    fn handle_unimplemented(&mut self, item: &dyn Debug) {
+        panic!("Unimplemented: {:?}", item);
+    }
+
+    fn report(&self) -> Result<(), ExpandError> {
+        // If there were errors, we wouldn't get this far, thus it's always OK
+        // to return OK.
+        Ok(())
+    }
+}
+
+impl UnimplementedAstNode for AlwaysPanic {
+    fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location) {
+        panic!("Unimplemented on {}: {:?}", location, item);
+    }
+
+    fn handle_unimplemented_parameter(
+        &mut self,
+        item_name: &str,
+        parameter_name: &str,
+        parameter: &dyn Debug,
+        location: &Location,
+    ) {
+        panic!(
+            "Unimplemented on {}: item `{}` for parameter `{}` with value {:?}",
+            location, item_name, parameter_name, parameter,
+        );
+    }
+
+    fn report(&self) -> Result<(), TranspileNodeError> {
+        // If there were errors, we wouldn't get this far, thus it's always OK
+        // to return OK.
+        Ok(())
+    }
+}

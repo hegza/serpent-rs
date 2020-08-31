@@ -1,15 +1,18 @@
-//! TODO: Find all HACKs
+//! TODO: Find all HACKs, FIXMEs
 pub mod dummy;
+mod from_py;
 mod util;
 
 use super::context::ImportKind;
 use crate::error::TranspileNodeError;
 use crate::transpile::{context::AstContext, python, rust};
+use from_py::FromPy;
 use log::warn;
 use py::Located;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
+use std::slice::Iter;
 
 /// A type alias for `Result<T, serpent::error::TranspileNodeError>`.
 pub type Result<T> = std::result::Result<T, TranspileNodeError>;
@@ -62,12 +65,11 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             level,
             module,
             names,
-        } => ctx.unimplemented_item(stmt),
+        } => visit_import_from(level, module, names, ctx),
         py::StatementType::Pass => ctx.unimplemented_item(stmt),
         py::StatementType::Assert { test, msg } => ctx.unimplemented_item(stmt),
         py::StatementType::Delete { targets } => ctx.unimplemented_item(stmt),
-        // TODO: py::StatementType::Assign { targets, value } => visit_assign(targets, value, ctx),
-        py::StatementType::Assign { targets, value } => ctx.unimplemented_item(stmt),
+        py::StatementType::Assign { targets, value } => visit_assign(targets, value, ctx),
         py::StatementType::AugAssign { target, op, value } => ctx.unimplemented_item(stmt),
         py::StatementType::AnnAssign {
             target,
@@ -203,10 +205,54 @@ fn visit_import(names: &Vec<py::ImportSymbol>, ctx: &mut AstContext) {
     }
 }
 
-/// Visits a Python import symbol with a symbol and an alias
+/// Visits each of the import symbols in a Python import from statement.
 ///
 /// Emits a `use crate::...` for identified, local imports and stores
 /// unidentified, foreign imports for later processing
+///
+/// TODO: merge Python import trees into Rust use trees instead of emitting a
+/// separate tree for each
+fn visit_import_from(
+    level: &usize,
+    module: &Option<String>,
+    names: &Vec<py::ImportSymbol>,
+    ctx: &mut AstContext,
+) {
+    if *level != 0 {
+        ctx.unimplemented_parameter("import_from", "level", level);
+    }
+
+    // Merge the module path into the symbol path by mapping the module Option
+    let mut names_with_module = module.as_ref().map(|module| {
+        names
+            .iter()
+            .map(|import_symbol| {
+                let new_symbol = module.to_string() + "::" + &import_symbol.symbol;
+                py::ImportSymbol {
+                    symbol: new_symbol,
+                    alias: import_symbol.alias.clone(),
+                }
+            })
+            .collect::<Vec<py::ImportSymbol>>()
+    });
+
+    let names = match names_with_module {
+        Some(ref names) => names,
+        None => names,
+    };
+
+    for name in names {
+        visit_import_symbol(name, ctx);
+    }
+}
+
+/// Visits a Python import symbol with a symbol and an alias
+///
+/// Emits one of two things, either:
+/// a) `use crate::{name.symbol} as {name.alias};` for identified local imports,
+/// or b) `use {name.symbol} as {name.alias}` for unidentified foreign imports.
+///
+/// Foreign imports are also stored for later processing.
 fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
     // De-structure import symbol
     let py::ImportSymbol { symbol, alias } = name;
@@ -219,6 +265,37 @@ fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
         ImportKind::Local => create_use_node(true, symbol, alias.as_ref()),
         ImportKind::Foreign => create_use_node(false, symbol, alias.as_ref()),
     };
+    ctx.emit(rust_node);
+}
+
+/// Visits a Python assign statement to emit a transpiled Rust assign statement.
+/// TODO: figure out if the assign is
+///     1. a re-assign,
+///     2. a shadow,
+///     3. or something else
+/// TODO: Python assignment statement should often become a Rust assignment
+/// expression wrapped in a statement (`rs::StmtKind::Expr()`)
+///
+/// For now, all assignments are assumed to be
+/// new variables by default, becoming Locals in Rust.
+fn visit_assign(targets: &[py::Expression], value: &py::Expression, ctx: &mut AstContext) {
+    // Ignore multi-target assignments
+    if targets.len() != 1 {
+        ctx.unimplemented_parameter("assign", "targets", &targets);
+    }
+
+    let lhs = targets.first().unwrap();
+
+    // Transform Python left-hand expression into a Rust pattern
+    let pat = rs::Pat::from_py(lhs, ctx);
+
+    // Transform the right-hand expression into the init value expression
+    let init = rs::Expr::from_py(value, ctx);
+    // An assign always has a rhs, thus the Rust Local always has an init
+    let init = Some(P(init));
+
+    let rust_stmt = rs::StmtKind::Local(P(create_local(pat, init)));
+    let rust_node = rust::NodeKind::Stmt(rust_stmt);
     ctx.emit(rust_node);
 }
 
@@ -251,6 +328,18 @@ fn infer_return_type(
     });
 
     rs::FnRetTy::Ty(ty)
+}
+
+fn create_local(pat: rs::Pat, init: Option<P<rs::Expr>>) -> rs::Local {
+    rs::Local {
+        id: dummy::node_id(),
+        pat: P(pat),
+        // Assume no type -> use type inference
+        ty: None,
+        init,
+        span: dummy::span(),
+        attrs: dummy::attr_vec(),
+    }
 }
 
 fn create_params_list(args: &Box<py::Parameters>, ctx: &mut AstContext) -> Vec<rs::Param> {
@@ -373,6 +462,7 @@ fn create_function_node(
     };
     // TODO: here is an opportunity to take a token stream as a parameter for more
     // effective fidelity printing
+    // TODO: can be used to store transpiled tokens for further processing
     let tokens = None;
 
     let rust_item = rs::ItemKind::Fn(defaultness, fn_sig, generics, block);
@@ -391,79 +481,6 @@ fn create_function_node(
 }
 
 /*
-/// Visits a Python assign statement to emit a transpiled Rust assign statement.
-fn visit_assign(targets: &[py::Expression], value: &py::Expression, ctx: &mut AstContext) -> Result<rs::Stmt> {
-    let lhs_target = if targets.len() == 1 {
-        let target = targets.first().unwrap();
-        let _location = &target.location;
-        let expr = &target.node;
-        let ident = match expr {
-            py::ExpressionType::Identifier { name } => {
-                proc_macro2::Ident::new(name, proc_macro2::Span::call_site())
-            }
-            _ => unimplemented!(),
-        };
-
-        // Binding identifier pattern
-        rs::Pat::Ident(rs::PatIdent {
-            attrs: Vec::new(),
-            by_ref: None,
-            mutability: None,
-            ident,
-            subpat: None,
-        })
-    } else {
-        unimplemented!()
-    };
-    rs::Pat::Wild(rs::PatWild {
-        attrs: Vec::new(),
-        underscore_token: <rs::Token![_]>::default(),
-    });
-
-    // TODO: Python 'assign' could be a Local or an assignment expression in Rust
-    // HACK: Used Local for now
-    let local = rs::Local {
-        attrs: Vec::new(),
-        let_token: <rs::Token![let]>::default(),
-        pat: lhs_target,
-        init: Some((
-            <rs::Token![=]>::default(),
-            Box::new(Expression(value).visit()?),
-        )),
-        semi_token: <rs::Token![;]>::default(),
-    };
-    let local = rs::Stmt::Local(local);
-    debug!("Assign({:?}, {:?}) -> {:?}", &targets, &value, &local);
-    Ok(local)
-}
-
-fn visit_expression(expr: &py::ExpressionType) -> Result<rs::Expr> {
-    let location = &expr.location;
-    let expr = &expr.node;
-
-    let rs_expr = match expr {
-        py::ExpressionType::Number { value } => visit_number(&value)?,
-        py::ExpressionType::Binop { a, op, b } => BinOp {
-            left: a,
-            op,
-            right: b,
-        }
-        .visit()?,
-        py::ExpressionType::Identifier { name } => syn::Expr::Path(Path(name).visit()?),
-        py::ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
-            attrs: vec![],
-            func: Box::new(visit_expression(&*function)),
-            paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-            args: visit_args(args)?,
-        }),
-        py::ExpressionType::String { value } => StringGroup(value).visit()?,
-        _ => {
-            println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
-            unimplemented!()
-        }
-    };
-    Ok(rs_expr)
-}
 
 // TODO: add indentation information somehow
 fn visit_body(body: &py::Suite, cursor: Option<&Cursor<PyNode>>) -> Result<rs::Block> {
@@ -475,56 +492,5 @@ fn visit_body(body: &py::Suite, cursor: Option<&Cursor<PyNode>>) -> Result<rs::B
         brace_token: rs::token::Brace(proc_macro2::Span::call_site()),
         stmts,
     })
-}
-
-
-fn visit_number(number: &py::Number) -> Result<rs::Expr> {
-    trace!("visit: {:?}", number);
-    use py::Number::*;
-    let rs_number = match number {
-        Integer { value } => visit_bigint(value)?,
-        _ => unimplemented!(),
-    };
-    debug!("{:?} -> {:?}", &number, rs_number);
-    Ok(rs_number)
-}
-
-fn visit_bigint(bigint: &BigInt) -> Result<rs::Expr> {
-    trace!("visit: {:?}", bigint);
-    let (sign, data) = bigint.to_u32_digits();
-    let value: u32 = {
-        if data.len() == 1 {
-            *data.first().unwrap()
-        } else {
-            unimplemented!()
-        }
-    };
-    let expr = match sign {
-        num_bigint::Sign::Plus => {
-            let literal = proc_macro2::Literal::u32_unsuffixed(value);
-            rs::Expr::Lit(rs::ExprLit {
-                attrs: Vec::new(),
-                lit: rs::Lit::new(literal),
-            })
-        }
-        _ => return Err(TranspileNodeError::unimplemented(bigint, None)),
-    };
-    debug!("{:?} -> {:?}", bigint, expr);
-    Ok(expr)
-}
-
-impl<S> From<S> for Pat
-where
-    S: AsRef<str>,
-{
-    fn from(s: S) -> Self {
-        Pat(rs::Pat::Ident(rs::PatIdent {
-            attrs: vec![],
-            by_ref: None,
-            mutability: None,
-            ident: Ident::from(s).0,
-            subpat: None,
-        }))
-    }
 }
 */

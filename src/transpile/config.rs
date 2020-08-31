@@ -21,6 +21,8 @@ pub enum MissingImplBehavior {
     /// Collect unimplemented Rust AST -> Rust source items as errors and return
     /// the first one
     ErrorAtCodegen,
+    /// Panic at untranspiled item, to get a call stack for sure.
+    PanicImmediately,
 }
 
 impl Default for TranspileConfig {
