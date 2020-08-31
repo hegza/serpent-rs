@@ -121,6 +121,7 @@ pub enum TranspileNodeError {
         debug: String,
         location: Option<Location>,
     },
+    UnresolvedBlock(usize),
 }
 
 impl TranspileNodeError {
@@ -137,6 +138,7 @@ impl TranspileNodeError {
     pub fn location(&self) -> Option<&Location> {
         match self {
             TranspileNodeError::Unimplemented { location, .. } => location.as_ref(),
+            TranspileNodeError::UnresolvedBlock(_) => None,
         }
     }
 
@@ -163,6 +165,11 @@ impl fmt::Display for TranspileNodeError {
                 Some(loc) => write!(f, "Unimplemented node: {:?} at {}", debug, loc),
                 None => write!(f, "Unimplemented node: {:?}", debug),
             },
+            TranspileNodeError::UnresolvedBlock(depth) => write!(
+                f,
+                "Incomplete block recursion, depth is non-zero ({}) at .finish()",
+                depth
+            ),
         }
     }
 }
