@@ -3,7 +3,7 @@
 
 use rustpython_parser::ast::{Located, Location};
 
-/// Parses Python comments, anything after '#' per line.
+/// Parses Python single-line comments, anything after '#' per line.
 pub fn parse_comments(source: &str) -> Vec<Located<String>> {
     let mut comments = vec![];
 
@@ -17,22 +17,23 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
                 comment = Some((Location::new(row, col), String::new()));
             }
             '\n' => {
-                // Newline ends a comment
-                if let Some((location, mut content)) = comment {
-                    // Also add the trailing newline to the comment
+                // Newline ends a comment, take it from the option
+                if let Some((location, mut content)) = comment.take() {
+                    // Also add the trailing newline as part of the comment
+                    // EOF comments don't have this
                     content.push('\n');
 
+                    // Then store the comment
                     comments.push(Located {
                         location,
                         node: content,
                     });
-
-                    comment = None;
                 }
                 row += 1;
-                col = 0; // gets incremented to 1 after match
+                col = 0; // gets incremented to 1 after the match statement
             }
             c => {
+                // Push the character into the comment, if we're currently in one
                 if let Some((_, comment)) = &mut comment {
                     comment.push(c);
                 }
@@ -40,7 +41,7 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
         }
         col += 1;
     }
-    // EOF ends a comment
+    // EOF ends a comment, without a newline
     if let Some((location, content)) = comment {
         comments.push(Located {
             location,
@@ -66,7 +67,7 @@ mod test {
         let correct = vec![
             Located {
                 location: Location::new(1, 1),
-                node: " Test comment".to_owned(),
+                node: " Test comment\n".to_owned(),
             },
             Located {
                 location: Location::new(3, 5),
