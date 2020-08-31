@@ -80,7 +80,7 @@ impl PrintContext {
         if self.depth == 0 {
             self.target.push_str(rust);
         } else {
-            // Chain indentations and then add statement
+            // Chain indentations and then add item
             self.target.push_str(
                 &std::iter::repeat("    ")
                     .take(self.depth)

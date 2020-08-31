@@ -52,18 +52,32 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
     comments
 }
 
+pub fn parse_orphan_newlines(source: &str) -> Vec<usize> {
+    source
+        .lines()
+        .enumerate()
+        .filter_map(|(line_idx, line)| {
+            if line.trim() == "" {
+                Some(line_idx + 1)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<usize>>()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
-    #[test]
-    fn comments_parse_right() {
-        let src = "\
+    const TEST_SRC: &'static str = "\
 # Test comment
 
     # Indented comment\
 ";
 
+    #[test]
+    fn comments_parse_right() {
         let correct = vec![
             Located {
                 location: Location::new(1, 1),
@@ -75,7 +89,15 @@ mod test {
             },
         ];
 
-        let comments = parse_comments(src);
+        let comments = parse_comments(TEST_SRC);
+        assert_eq!(&comments, &correct);
+    }
+
+    #[test]
+    fn orphan_newlines_parse_right() {
+        let correct = vec![2];
+
+        let comments = parse_orphan_newlines(TEST_SRC);
         assert_eq!(&comments, &correct);
     }
 }

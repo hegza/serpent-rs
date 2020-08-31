@@ -12,7 +12,7 @@ use config::TranspileConfig;
 use context::{AstContext, ProgramContext};
 use itertools::Itertools;
 use log::info;
-use parser_ext::parse_comments;
+use parser_ext::{parse_comments, parse_orphan_newlines};
 use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
@@ -118,9 +118,19 @@ fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, SerpentError>
         .into_iter()
         .map(|comment| python::NodeKind::Comment(comment));
 
+    // Parse orphan newlines with their locations
+    let newlines = parse_orphan_newlines(src);
+    let newline_nodes = newlines
+        .into_iter()
+        .map(|row| python::NodeKind::Newline(Location::new(row, 1)));
+
     // Re-arrange comments and statements
     let py_nodes = stmt_nodes
         .merge_by(comment_nodes, |a, b| {
+            let (a_loc, b_loc) = (a.location(), b.location());
+            compare_locations(a_loc, b_loc)
+        })
+        .merge_by(newline_nodes, |a, b| {
             let (a_loc, b_loc) = (a.location(), b.location());
             compare_locations(a_loc, b_loc)
         })
