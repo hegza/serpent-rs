@@ -74,6 +74,7 @@ impl UnimplementedAstNode for ListUnimplemented {
         for item in &self.items {
             println!("\t{}", item);
         }
+        println!("Returning with {} errors.", self.items.len());
 
         // Return the first untranspiled node as error
         if self.allow_errors {

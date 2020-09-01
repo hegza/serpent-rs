@@ -2,7 +2,9 @@
 
 use super::{dummy, util};
 use crate::transpile::context::AstContext;
+use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
+use rustc_ap_rustc_span::source_map::Spanned;
 use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
 
@@ -63,11 +65,11 @@ impl FromPy<py::Expression> for rs::Pat {
 
 impl FromPy<py::Expression> for rs::ExprKind {
     fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
-        // TODO: expr.location ignored
-
         match &expr.node {
             py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Binop { a, op, b } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Binop { a, op, b } => {
+                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
+            }
             py::ExpressionType::Subscript { a, b } => ctx.unimplemented_item(expr),
             py::ExpressionType::Unop { op, a } => ctx.unimplemented_item(expr),
             py::ExpressionType::Await { value } => ctx.unimplemented_item(expr),
@@ -108,6 +110,78 @@ impl FromPy<py::Expression> for rs::ExprKind {
             span: dummy::span(),
         };
         rs::ExprKind::Block(P(block), None)
+    }
+}
+
+fn into_rs_bin_op(
+    kind: BinOp,
+    a: &Box<py::Expression>,
+    b: &Box<py::Expression>,
+    ctx: &mut AstContext,
+) -> rs::ExprKind {
+    let op = match kind {
+        BinOp::Ast(op) => op,
+        BinOp::Unimplemented => {
+            // TODO: annotate with a comment, eg. `ctx.annotete()`
+            rs::BinOpKind::Add
+        }
+    };
+
+    rs::ExprKind::Binary(
+        Spanned {
+            node: op,
+            span: dummy::span(),
+        },
+        P(rs::Expr::from_py(a, ctx)),
+        P(rs::Expr::from_py(b, ctx)),
+    )
+}
+
+/// Transpiler extension to the rustc_ast BinOp.
+pub(crate) enum BinOp {
+    /// Existing rustc_ast BinOp
+    Ast(rs::BinOpKind),
+    Unimplemented,
+}
+
+impl FromPy<py::Operator> for BinOp {
+    fn from_py(op: &py::Operator, ctx: &mut AstContext) -> Self {
+        match op {
+            py::Operator::Add => BinOp::Ast(rs::BinOpKind::Add),
+            py::Operator::Sub => BinOp::Ast(rs::BinOpKind::Sub),
+            py::Operator::Mult => BinOp::Ast(rs::BinOpKind::Mul),
+            // TODO: the transpiled probably needs a way to tag this and forward it to the
+            // transpiled output This is definitely something that could be "user
+            // transpilable"
+            py::Operator::MatMult => {
+                ctx.unimplemented_parameter("bin_op", "op", op);
+                BinOp::Unimplemented
+            }
+            // TODO: Python 3 automatically uses floats for division, Rust should do that here too
+            py::Operator::Div => {
+                warn!("py::Div transpiled as rs::Div, this behaves incorrectly for integral arguments");
+                BinOp::Ast(rs::BinOpKind::Div)
+            }
+            py::Operator::Mod => BinOp::Ast(rs::BinOpKind::Rem),
+            // TODO: pow can be implemented using the standard library
+            py::Operator::Pow => {
+                ctx.unimplemented_parameter("bin_op", "op", op);
+                BinOp::Unimplemented
+            }
+            py::Operator::LShift => BinOp::Ast(rs::BinOpKind::Shl),
+            py::Operator::RShift => BinOp::Ast(rs::BinOpKind::Shr),
+            py::Operator::BitOr => BinOp::Ast(rs::BinOpKind::BitOr),
+            py::Operator::BitXor => BinOp::Ast(rs::BinOpKind::BitXor),
+            py::Operator::BitAnd => BinOp::Ast(rs::BinOpKind::BitAnd),
+            // TODO: Python floor div is different from Rust integer division, this implementation
+            // behaves incorrectly for some values
+            py::Operator::FloorDiv => {
+                warn!(
+                    "py::FloorDiv transpiled as rs::Div, this behaves incorrectly for some values"
+                );
+                BinOp::Ast(rs::BinOpKind::Div)
+            }
+        }
     }
 }
 
