@@ -1,17 +1,79 @@
 //! Defines conversions from Python AST nodes into Rust AST nodes.
+//!
+//! TODO: Review all HACKs, FIXMEs
 
 use super::{dummy, util};
 use crate::transpile::context::AstContext;
 use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ap_rustc_span::source_map::Spanned;
-use rustc_ast::{ast as rs, ptr::P};
+use rustc_ast::{ast as rs, ptr::P, token};
 use rustpython_parser::ast as py;
 
 /// Like `std::convert::From` but for Python AST node conversion into Rust. Does
-/// not have Into reciprocal.
+/// not have Into reciprocal. Should be implemented for relatively easy
+/// conversions, more complex transformations might require more context.
 pub(crate) trait FromPy<T>: Sized {
     fn from_py(_: &T, ctx: &mut AstContext) -> Self;
+}
+
+impl FromPy<py::Expression> for rs::ExprKind {
+    fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
+        match &expr.node {
+            py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Binop { a, op, b } => {
+                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
+            }
+            py::ExpressionType::Subscript { a, b } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Unop { op, a } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Await { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Yield { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::YieldFrom { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Compare { vals, ops } => ctx.unimplemented_item(expr),
+            // An attribute maps to either a rs::ExprKind::MethodCall or a rs::ExprKind::Field, this
+            // can be determined by walking the AST in a late pass
+            py::ExpressionType::Attribute { value, name } => {
+                return attribute_into_rs(value, name, ctx)
+            }
+            py::ExpressionType::Call {
+                function,
+                args,
+                keywords,
+            } => return into_rs_call(function, args, keywords, ctx),
+            py::ExpressionType::Number { value } => {
+                return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
+            }
+            py::ExpressionType::List { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Tuple { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Dict { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Set { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Starred { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Slice { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::String { value } => {
+                return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
+            }
+            py::ExpressionType::Bytes { value } => ctx.unimplemented_item(expr),
+            // An identifier in an expression is probably a rs::Path
+            py::ExpressionType::Identifier { name } => return id_to_path(name, ctx),
+            py::ExpressionType::Lambda { args, body } => ctx.unimplemented_item(expr),
+            py::ExpressionType::IfExpression { test, body, orelse } => ctx.unimplemented_item(expr),
+            py::ExpressionType::NamedExpression { left, right } => ctx.unimplemented_item(expr),
+            py::ExpressionType::True => ctx.unimplemented_item(expr),
+            py::ExpressionType::False => ctx.unimplemented_item(expr),
+            py::ExpressionType::None => ctx.unimplemented_item(expr),
+            py::ExpressionType::Ellipsis => ctx.unimplemented_item(expr),
+        };
+
+        // HACK: Just return a placeholder expression for now
+        let block = rs::Block {
+            stmts: vec![],
+            id: dummy::node_id(),
+            rules: rs::BlockCheckMode::Default,
+            span: dummy::span(),
+        };
+        rs::ExprKind::Block(P(block), None)
+    }
 }
 
 impl FromPy<py::Expression> for rs::PatKind {
@@ -63,55 +125,29 @@ impl FromPy<py::Expression> for rs::Pat {
     }
 }
 
-impl FromPy<py::Expression> for rs::ExprKind {
-    fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
-        match &expr.node {
-            py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Binop { a, op, b } => {
-                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
-            }
-            py::ExpressionType::Subscript { a, b } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Unop { op, a } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Await { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Yield { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::YieldFrom { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Compare { vals, ops } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Attribute { value, name } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Call {
-                function,
-                args,
-                keywords,
-            } => return into_rs_call(function, args, keywords, ctx),
-            py::ExpressionType::Number { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::List { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Tuple { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Dict { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Set { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Starred { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Slice { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::String { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Bytes { value } => ctx.unimplemented_item(expr),
-            // An identifier in an expression is probably a rs::Path
-            py::ExpressionType::Identifier { name } => return id_to_path(name, ctx),
-            py::ExpressionType::Lambda { args, body } => ctx.unimplemented_item(expr),
-            py::ExpressionType::IfExpression { test, body, orelse } => ctx.unimplemented_item(expr),
-            py::ExpressionType::NamedExpression { left, right } => ctx.unimplemented_item(expr),
-            py::ExpressionType::True => ctx.unimplemented_item(expr),
-            py::ExpressionType::False => ctx.unimplemented_item(expr),
-            py::ExpressionType::None => ctx.unimplemented_item(expr),
-            py::ExpressionType::Ellipsis => ctx.unimplemented_item(expr),
-        };
+// An attribute maps to either a rs::ExprKind::MethodCall or a
+// rs::ExprKind::Field, this can be determined by walking the AST in a late pass
+fn attribute_into_rs(
+    value: &Box<py::Expression>,
+    name: &str,
+    ctx: &mut AstContext,
+) -> rs::ExprKind {
+    // HACK: assume all attributes are foreign method accesses
+    //ctx.unimplemented_parameter("attribute", "(value, name)", &(value, name));
 
-        // HACK: Just return a placeholder expression for now
-        let block = rs::Block {
-            stmts: vec![],
-            id: dummy::node_id(),
-            rules: rs::BlockCheckMode::Default,
-            span: dummy::span(),
-        };
-        rs::ExprKind::Block(P(block), None)
-    }
+    // rs::ExprKind::MethodCall:
+    //
+    // The first element of the vector of an Expr is the expression that evaluates
+    // to the object on which the method is being called on (the receiver), and the
+    // remaining elements are the rest of the arguments.
+    let receiver = rs::Expr::from_py(value, ctx);
+
+    // The PathSegment represents the method name and its generic arguments (within
+    // the angle brackets).
+    let method_name = name;
+    let seg = rs::PathSegment::from_ident(util::ident(method_name));
+
+    rs::ExprKind::MethodCall(seg, vec![P(receiver)], dummy::span())
 }
 
 fn id_to_path(id: &str, ctx: &mut AstContext) -> rs::ExprKind {
@@ -127,8 +163,28 @@ fn into_rs_bin_op(
     b: &Box<py::Expression>,
     ctx: &mut AstContext,
 ) -> rs::ExprKind {
+    let a = P(rs::Expr::from_py(a, ctx));
+    let b = P(rs::Expr::from_py(b, ctx));
+
     let op = match kind {
         BinOp::Ast(op) => op,
+        BinOp::Method(method) => match method {
+            BinMethod::Powi => {
+                // HACK: just throwing in a `std::f64::powi` here without thinking about it too
+                // much
+                let kind = id_to_path("std::f64::powi", ctx);
+                let func = rs::Expr {
+                    id: dummy::node_id(),
+                    kind,
+                    span: dummy::span(),
+                    attrs: dummy::attr_vec(),
+                    tokens: None,
+                };
+
+                let args = vec![a, b];
+                return rs::ExprKind::Call(P(func), args);
+            }
+        },
         BinOp::Unimplemented => {
             // TODO: annotate with a comment, eg. `ctx.annotete()`
             rs::BinOpKind::Add
@@ -140,8 +196,8 @@ fn into_rs_bin_op(
             node: op,
             span: dummy::span(),
         },
-        P(rs::Expr::from_py(a, ctx)),
-        P(rs::Expr::from_py(b, ctx)),
+        a,
+        b,
     )
 }
 
@@ -169,7 +225,13 @@ fn into_rs_call(
 pub(crate) enum BinOp {
     /// Existing rustc_ast BinOp
     Ast(rs::BinOpKind),
+    /// A method call
+    Method(BinMethod),
     Unimplemented,
+}
+
+pub(crate) enum BinMethod {
+    Powi,
 }
 
 impl FromPy<py::Operator> for BinOp {
@@ -193,8 +255,9 @@ impl FromPy<py::Operator> for BinOp {
             py::Operator::Mod => BinOp::Ast(rs::BinOpKind::Rem),
             // TODO: pow can be implemented using the standard library
             py::Operator::Pow => {
-                ctx.unimplemented_parameter("bin_op", "op", op);
-                BinOp::Unimplemented
+                // TODO: determine types and choose implementation based on runtime
+                warn!("py::Pow transpiled as rs::powi, this only covers integral cases");
+                BinOp::Method(BinMethod::Powi)
             }
             py::Operator::LShift => BinOp::Ast(rs::BinOpKind::Shl),
             py::Operator::RShift => BinOp::Ast(rs::BinOpKind::Shr),
@@ -222,6 +285,28 @@ impl FromPy<py::Expression> for rs::Expr {
             attrs: dummy::attr_vec(),
             // TODO: maybe store-transpiled tokens
             tokens: None,
+        }
+    }
+}
+
+impl FromPy<py::Number> for rs::Lit {
+    fn from_py(number: &py::Number, ctx: &mut AstContext) -> Self {
+        let kind = rs::LitKind::from_py(number, ctx);
+        rs::Lit {
+            token: dummy::token(kind.clone()),
+            kind,
+            span: dummy::span(),
+        }
+    }
+}
+
+impl FromPy<py::StringGroup> for rs::Lit {
+    fn from_py(sg: &py::StringGroup, ctx: &mut AstContext) -> Self {
+        let kind = rs::LitKind::from_py(sg, ctx);
+        rs::Lit {
+            token: dummy::token(kind.clone()),
+            kind,
+            span: dummy::span(),
         }
     }
 }
@@ -267,18 +352,24 @@ impl FromPy<num_bigint::BigInt> for rs::LitKind {
     }
 }
 
-/*
-fn visit_expression(expr: &py::ExpressionType) -> Result<rs::Expr> {
-    let location = &expr.location;
-    let expr = &expr.node;
-
-    let rs_expr = match expr {
-        py::ExpressionType::String { value } => StringGroup(value).visit()?,
-        _ => {
-            println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
-            unimplemented!()
-        }
-    };
-    Ok(rs_expr)
+impl FromPy<py::StringGroup> for rs::LitKind {
+    fn from_py(sg: &py::StringGroup, ctx: &mut AstContext) -> Self {
+        let s = match sg {
+            py::StringGroup::Constant { value } => value,
+            py::StringGroup::FormattedValue {
+                value,
+                conversion,
+                spec,
+            } => {
+                ctx.unimplemented_parameter("StringGroup", "sg", sg);
+                "()"
+            }
+            py::StringGroup::Joined { values } => {
+                ctx.unimplemented_parameter("StringGroup", "sg", sg);
+                return rs::LitKind::from_py(values.first().unwrap(), ctx);
+            }
+        };
+        let sym = util::symbol(s);
+        rs::LitKind::Str(sym, rs::StrStyle::Cooked)
+    }
 }
-*/

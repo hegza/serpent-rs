@@ -1,4 +1,4 @@
-//! TODO: Find all HACKs, FIXMEs
+//! TODO: Review all HACKs, FIXMEs
 pub mod dummy;
 mod from_py;
 mod util;
@@ -77,7 +77,7 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             value,
         } => ctx.unimplemented_item(stmt),
         // TODO: py::StatementType::Expression { expression } => visit_expression(expression, ctx),
-        py::StatementType::Expression { expression } => ctx.unimplemented_item(stmt),
+        py::StatementType::Expression { expression } => visit_expression(expression, ctx),
         py::StatementType::Global { names } => ctx.unimplemented_item(stmt),
         py::StatementType::Nonlocal { names } => ctx.unimplemented_item(stmt),
         py::StatementType::If { test, body, orelse } => ctx.unimplemented_item(stmt),
@@ -117,6 +117,14 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             returns,
         } => visit_function_def(is_async, name, args, body, decorator_list, returns, ctx),
     }
+}
+
+/// Visits a Python expression and emits a transpiled Rust expression
+fn visit_expression(expression: &py::Expression, ctx: &mut AstContext) {
+    let expr = rs::Expr::from_py(expression, ctx);
+    let expr_node = rust::NodeKind::Stmt(rs::StmtKind::Expr(P(expr)));
+
+    ctx.emit(expr_node);
 }
 
 /// Visits a Python function definition to emit a transpiled Rust function
