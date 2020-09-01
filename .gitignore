@@ -3,3 +3,6 @@
 
 ## Ignore Cargo.lock for lib crate
 Cargo.lock
+
+## Ignore compiled Python
+*.pyc
