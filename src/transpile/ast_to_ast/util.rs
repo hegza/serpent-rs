@@ -5,8 +5,13 @@ use super::dummy;
 
 /// Constructs an interned string for the identifier
 pub fn ident(from: &str) -> symbol::Ident {
-    let name = symbol::Symbol::intern(from);
+    let name = symbol(from);
     symbol::Ident::with_dummy_span(name)
+}
+
+/// Constructs an interned string for the symbol
+pub fn symbol(from: &str) -> symbol::Symbol {
+    symbol::Symbol::intern(from)
 }
 
 /// Constructs a pattern from string
@@ -24,4 +29,17 @@ pub fn str_to_pat_kind(from: &str) -> ast::PatKind {
         ident(from),
         None,
     )
+}
+
+pub fn str_to_path(id: &str) -> ast::Path {
+    let segments = id
+        .split('.')
+        .map(ident)
+        .map(ast::PathSegment::from_ident)
+        .collect::<Vec<ast::PathSegment>>();
+
+    ast::Path {
+        span: dummy::span(),
+        segments,
+    }
 }

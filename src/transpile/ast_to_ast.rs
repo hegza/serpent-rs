@@ -149,39 +149,6 @@ fn visit_function_def(
     let fn_node = create_function_node(name, *is_async, params, ret, generics, block);
 
     ctx.emit(fn_node);
-    /*
-    // <--! OLD -->
-    // signature, eg. `unsafe fn initialize(&self)`
-    let signature = rs::Signature {
-        constness: None,
-        asyncness: None,
-        unsafety: None,
-        abi: None,
-        fn_token: <rs::Token![fn]>::default(),
-        ident: Ident::from(name).0,
-        generics: rs::Generics {
-            lt_token: None,
-            params: rs::punctuated::Punctuated::new(),
-            gt_token: None,
-            where_clause: None,
-        },
-        paren_token: rs::token::Paren(proc_macro2::Span::call_site()),
-        inputs: visit_params(args)?,
-        variadic: None,
-        output: rs::ReturnType::Default,
-    };
-    let block = visit_body(body, cursor)?; // { ... }
-    let item_fn = rs::ItemFn {
-        attrs: vec![],
-        vis: rs::Visibility::Public(rs::VisPublic {
-            pub_token: <rs::Token![pub]>::default(),
-        }),
-        sig: signature,
-        block: Box::new(block),
-    };
-    let item = rs::Item::Fn(item_fn);
-    Ok(rs::Stmt::Item(item))
-    */
 }
 
 /// Visits a Python return statement to emit a transpiled Rust return statement.

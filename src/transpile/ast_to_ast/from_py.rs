@@ -81,7 +81,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 function,
                 args,
                 keywords,
-            } => ctx.unimplemented_item(expr),
+            } => return into_rs_call(function, args, keywords, ctx),
             py::ExpressionType::Number { value } => ctx.unimplemented_item(expr),
             py::ExpressionType::List { elements } => ctx.unimplemented_item(expr),
             py::ExpressionType::Tuple { elements } => ctx.unimplemented_item(expr),
@@ -92,7 +92,8 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::Slice { elements } => ctx.unimplemented_item(expr),
             py::ExpressionType::String { value } => ctx.unimplemented_item(expr),
             py::ExpressionType::Bytes { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Identifier { name } => ctx.unimplemented_item(expr),
+            // An identifier in an expression is probably a rs::Path
+            py::ExpressionType::Identifier { name } => return id_to_path(name, ctx),
             py::ExpressionType::Lambda { args, body } => ctx.unimplemented_item(expr),
             py::ExpressionType::IfExpression { test, body, orelse } => ctx.unimplemented_item(expr),
             py::ExpressionType::NamedExpression { left, right } => ctx.unimplemented_item(expr),
@@ -111,6 +112,13 @@ impl FromPy<py::Expression> for rs::ExprKind {
         };
         rs::ExprKind::Block(P(block), None)
     }
+}
+
+fn id_to_path(id: &str, ctx: &mut AstContext) -> rs::ExprKind {
+    let path = util::str_to_path(id);
+
+    // FIXME: Paths are never qualified (first arg = None)
+    rs::ExprKind::Path(None, path)
 }
 
 fn into_rs_bin_op(
@@ -134,6 +142,26 @@ fn into_rs_bin_op(
         },
         P(rs::Expr::from_py(a, ctx)),
         P(rs::Expr::from_py(b, ctx)),
+    )
+}
+
+// TODO: could technically be rs::Call or rs::Methodcall, I think; unless all
+// method calls in Python are "Attributes"
+fn into_rs_call(
+    function: &Box<py::Expression>,
+    args: &[py::Expression],
+    keywords: &Vec<py::Keyword>,
+    ctx: &mut AstContext,
+) -> rs::ExprKind {
+    if keywords.len() != 0 {
+        ctx.unimplemented_parameter("call", "kewords", keywords);
+    }
+
+    rs::ExprKind::Call(
+        P(rs::Expr::from_py(function, ctx)),
+        args.iter()
+            .map(|arg| P(rs::Expr::from_py(arg, ctx)))
+            .collect::<Vec<P<rs::Expr>>>(),
     )
 }
 
@@ -198,26 +226,53 @@ impl FromPy<py::Expression> for rs::Expr {
     }
 }
 
+impl FromPy<py::Number> for rs::LitKind {
+    fn from_py(number: &py::Number, ctx: &mut AstContext) -> Self {
+        match number {
+            py::Number::Integer { value } => rs::LitKind::from_py(value, ctx),
+            py::Number::Float { value } => rs::LitKind::from_py(value, ctx),
+            py::Number::Complex { real, imag } => {
+                ctx.unimplemented_parameter("number", "complex", number);
+                rs::LitKind::Err(util::symbol(&format!("{:?}", number)))
+            }
+        }
+    }
+}
+
+/// Converts a Pythonic float into a Rust float
+impl FromPy<f64> for rs::LitKind {
+    fn from_py(f: &f64, ctx: &mut AstContext) -> Self {
+        let s = format!("{}", f);
+        let sym = util::symbol(&s);
+        // HACK: all floats unsuffixed; could use _f32, _f64 for clarity, or make it as
+        // optional
+        rs::LitKind::Float(sym, rs::LitFloatType::Unsuffixed)
+    }
+}
+
+impl FromPy<num_bigint::BigInt> for rs::LitKind {
+    fn from_py(bigint: &num_bigint::BigInt, ctx: &mut AstContext) -> Self {
+        let (sign, data) = bigint.to_u32_digits();
+        let value = {
+            if data.len() == 1 {
+                *data.first().unwrap()
+            } else {
+                // FIXME: handle ints larger than u32, maybe use bigint::u32_to_u128
+                unimplemented!("integer literal is too large, not handled")
+            }
+        };
+        // HACK: all ints unsuffixed; could use _i32, _u32 for clarity, or make it as
+        // optional
+        rs::LitKind::Int(value as u128, rs::LitIntType::Unsuffixed)
+    }
+}
+
 /*
 fn visit_expression(expr: &py::ExpressionType) -> Result<rs::Expr> {
     let location = &expr.location;
     let expr = &expr.node;
 
     let rs_expr = match expr {
-        py::ExpressionType::Number { value } => visit_number(&value)?,
-        py::ExpressionType::Binop { a, op, b } => BinOp {
-            left: a,
-            op,
-            right: b,
-        }
-        .visit()?,
-        py::ExpressionType::Identifier { name } => syn::Expr::Path(Path(name).visit()?),
-        py::ExpressionType::Call { function, args, .. } => syn::Expr::Call(syn::ExprCall {
-            attrs: vec![],
-            func: Box::new(visit_expression(&*function)),
-            paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-            args: visit_args(args)?,
-        }),
         py::ExpressionType::String { value } => StringGroup(value).visit()?,
         _ => {
             println!("unimplemented: {:?}\nlocation: {:?}", expr, location);
@@ -225,40 +280,5 @@ fn visit_expression(expr: &py::ExpressionType) -> Result<rs::Expr> {
         }
     };
     Ok(rs_expr)
-}
-
-fn visit_number(number: &py::Number) -> Result<rs::Expr> {
-    trace!("visit: {:?}", number);
-    use py::Number::*;
-    let rs_number = match number {
-        Integer { value } => visit_bigint(value)?,
-        _ => unimplemented!(),
-    };
-    debug!("{:?} -> {:?}", &number, rs_number);
-    Ok(rs_number)
-}
-
-fn visit_bigint(bigint: &BigInt) -> Result<rs::Expr> {
-    trace!("visit: {:?}", bigint);
-    let (sign, data) = bigint.to_u32_digits();
-    let value: u32 = {
-        if data.len() == 1 {
-            *data.first().unwrap()
-        } else {
-            unimplemented!()
-        }
-    };
-    let expr = match sign {
-        num_bigint::Sign::Plus => {
-            let literal = proc_macro2::Literal::u32_unsuffixed(value);
-            rs::Expr::Lit(rs::ExprLit {
-                attrs: Vec::new(),
-                lit: rs::Lit::new(literal),
-            })
-        }
-        _ => return Err(TranspileNodeError::unimplemented(bigint, None)),
-    };
-    debug!("{:?} -> {:?}", bigint, expr);
-    Ok(expr)
 }
 */
