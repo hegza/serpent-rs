@@ -35,7 +35,10 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
 fn visit_item(name: Option<&str>, item: &rs::ItemKind, ctx: &mut PrintContext) {
     match item {
         rs::ItemKind::ExternCrate(_) => ctx.unimplemented(item),
-        rs::ItemKind::Use(use_tree) => ctx.emit(&use_tree.fidelity_print(ctx)),
+        rs::ItemKind::Use(use_tree) => {
+            let out_str = use_tree.fidelity_print(ctx);
+            ctx.emit(&out_str);
+        }
         rs::ItemKind::Static(_, _, _) => ctx.unimplemented(item),
         rs::ItemKind::Const(_, _, _) => ctx.unimplemented(item),
         rs::ItemKind::Fn(defaultness, fn_sig, generics, block) => visit_fn(
@@ -97,7 +100,8 @@ fn visit_item_trait(item: &rs::Item, ctx: &mut PrintContext) {
 
 /// Visits a statement and emits it's contents
 fn visit_stmt(stmt: &rs::StmtKind, ctx: &mut PrintContext) {
-    ctx.emit(&stmt.fidelity_print(ctx))
+    let out_str = stmt.fidelity_print(ctx);
+    ctx.emit(&out_str)
 }
 
 fn visit_stmt_trait(stmt: &rs::Stmt, ctx: &mut PrintContext) {
@@ -116,7 +120,8 @@ fn visit_fn(
 ) {
     // Emit signature
     let signature = FnSignature(name, fn_sig, generics);
-    ctx.emit(&signature.fidelity_print(ctx));
+    let out_str = signature.fidelity_print(ctx);
+    ctx.emit(&out_str);
 
     if let Some(block) = block {
         // Hit a space between a function signature and it's block

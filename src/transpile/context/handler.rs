@@ -145,6 +145,7 @@ impl UnimplementedExpand for ListUnimplementedExpand {
         for item in &self.0 {
             println!("\t{}", item);
         }
+        println!("Returning with {} errors.", self.0.len());
 
         // Return the first untranspiled node as error
         Err(ExpandError::Unimplemented(self.0.first().unwrap().clone()))

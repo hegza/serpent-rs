@@ -13,11 +13,11 @@ use rustc_ast::token;
 /// Something that can be printed into Rust source code. Attempts to match
 /// whatever original representation as closely as possible.
 pub(crate) trait FidelityPrint {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String;
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String;
 }
 
 impl FidelityPrint for rs::UseTree {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         let prefix = self.prefix.fidelity_print(ctx);
 
         let path = match self.kind {
@@ -35,7 +35,7 @@ impl FidelityPrint for rs::UseTree {
 
 impl FidelityPrint for rs::Path {
     // Join paths like `seg::seg`
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         self.segments
             .iter()
             .map(|seg| seg.fidelity_print(ctx))
@@ -44,7 +44,7 @@ impl FidelityPrint for rs::Path {
 }
 
 impl FidelityPrint for rs::PathSegment {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         // Type / lifetime parameters attached to the path
         let tl_parameters = &self.args;
         if tl_parameters.is_some() {
@@ -60,7 +60,7 @@ impl FidelityPrint for rs::PathSegment {
 
 impl FidelityPrint for rustc_ap_rustc_span::symbol::Ident {
     // NOTE: needs to lock the string interner
-    fn fidelity_print(&self, _ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, _ctx: &mut PrintContext) -> String {
         self.to_string()
     }
 }
@@ -75,7 +75,7 @@ pub struct FnSignature<'a>(
 );
 
 impl<'a> FidelityPrint for FnSignature<'a> {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         let header = self.1.header.fidelity_print(ctx);
         let params = self.1.decl.inputs.fidelity_print(ctx);
         let ret_opt = self.1.decl.output.fidelity_print(ctx);
@@ -92,7 +92,7 @@ impl<'a> FidelityPrint for FnSignature<'a> {
 }
 
 impl FidelityPrint for rs::FnHeader {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         let rs::FnHeader {
             unsafety,
             asyncness,
@@ -127,7 +127,7 @@ impl FidelityPrint for rs::FnHeader {
 }
 
 impl FidelityPrint for Vec<rs::Param> {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         self.iter()
             .map(|param| param.fidelity_print(ctx))
             .join(", ")
@@ -135,7 +135,7 @@ impl FidelityPrint for Vec<rs::Param> {
 }
 
 impl FidelityPrint for rs::Param {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         format!(
             "{}: {}",
             self.pat.fidelity_print(ctx),
@@ -145,7 +145,7 @@ impl FidelityPrint for rs::Param {
 }
 
 impl FidelityPrint for rs::Pat {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         match &self.kind {
             rs::PatKind::Ident(mode, ident, pat) => {
                 if pat.is_some() {
@@ -168,7 +168,7 @@ impl FidelityPrint for rs::Pat {
 }
 
 impl FidelityPrint for rs::Ty {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         match &self.kind {
             _ => ctx.unimplemented_print(self),
         }
@@ -176,7 +176,7 @@ impl FidelityPrint for rs::Ty {
 }
 
 impl FidelityPrint for rs::FnRetTy {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         match self {
             // The default return for functions is rendered as `()`
             rs::FnRetTy::Default(_) => format!("()"),
@@ -186,13 +186,13 @@ impl FidelityPrint for rs::FnRetTy {
 }
 
 impl FidelityPrint for rs::Stmt {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         self.kind.fidelity_print(ctx)
     }
 }
 
 impl FidelityPrint for rs::StmtKind {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         match self {
             rs::StmtKind::Local(_) => ctx.unimplemented_print(self),
             rs::StmtKind::Item(_) => ctx.unimplemented_print(self),
@@ -205,19 +205,19 @@ impl FidelityPrint for rs::StmtKind {
 }
 
 impl FidelityPrint for rs::StrLit {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         self.as_lit().fidelity_print(ctx)
     }
 }
 
 impl FidelityPrint for rs::Lit {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         self.token.fidelity_print(ctx)
     }
 }
 
 impl FidelityPrint for token::Lit {
-    fn fidelity_print(&self, ctx: &PrintContext) -> String {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         // HACK: this maybe produces what we want; otherwise `match self.kind`
         self.symbol.to_string()
     }

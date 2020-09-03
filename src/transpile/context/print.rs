@@ -48,10 +48,11 @@ impl PrintContext {
         self.unimplemented_handler.handle_unimplemented(&item);
     }
 
-    pub fn unimplemented_print<T>(&self, item: &T) -> String
+    pub fn unimplemented_print<T>(&mut self, item: &T) -> String
     where
         T: Debug,
     {
+        self.unimplemented_handler.handle_unimplemented(&item);
         if self.emit_placeholders {
             format!("/* T-TODO: rs::{:?} */", item)
         } else {
