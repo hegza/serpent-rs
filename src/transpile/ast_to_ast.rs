@@ -80,7 +80,7 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
         py::StatementType::Expression { expression } => visit_expression(expression, ctx),
         py::StatementType::Global { names } => ctx.unimplemented_item(stmt),
         py::StatementType::Nonlocal { names } => ctx.unimplemented_item(stmt),
-        py::StatementType::If { test, body, orelse } => ctx.unimplemented_item(stmt),
+        py::StatementType::If { test, body, orelse } => visit_if(test, body, orelse, ctx),
         py::StatementType::While { test, body, orelse } => ctx.unimplemented_item(stmt),
         py::StatementType::With {
             is_async,
@@ -127,6 +127,33 @@ fn visit_expression(expression: &py::Expression, ctx: &mut AstContext) {
     ctx.emit(expr_node);
 }
 
+/// Visits a Python if-else statement and block to emit a matching transpiled
+/// Rust if-expression.
+fn visit_if(
+    test: &py::Expression,
+    body: &Vec<py::Statement>,
+    orelse: &Option<Vec<py::Statement>>,
+    ctx: &mut AstContext,
+) {
+    // Transpile
+    let test = rs::Expr::from_py(test, ctx);
+    let body = visit_block(body, ctx);
+    let orelse = orelse.as_ref().map(|stmts| {
+        P(dummy::expr(rs::ExprKind::Block(
+            visit_block(stmts, ctx),
+            None,
+        )))
+    });
+
+    // Construct Rust if-expression
+    let expr = rs::ExprKind::If(P(test), body, orelse);
+    let stmt = rs::StmtKind::Expr(P(dummy::expr(expr)));
+    let if_node = rust::NodeKind::Stmt(stmt);
+
+    // Emit Rust if-expression
+    ctx.emit(if_node);
+}
+
 /// Visits a Python function definition to emit a transpiled Rust function
 /// definition.
 fn visit_function_def(
@@ -148,23 +175,41 @@ fn visit_function_def(
     let generics = rs::Generics::default();
 
     // Generate statements in the body
-    ctx.start_block();
-    for stmt in body {
-        visit_statement(stmt, ctx);
-    }
-    let block = ctx.finish_block();
+    let block = visit_block(body, ctx);
 
-    let fn_node = create_function_node(name, *is_async, params, ret, generics, block);
+    let fn_node = create_function_node(name, *is_async, params, ret, generics, Some(block));
 
     ctx.emit(fn_node);
 }
 
-/// Visits a Python return statement to emit a transpiled Rust return statement.
+/// Visits a block of Python to create a block of Rust using the AstContext.
 ///
-/// TODO: merge Python import trees into Rust use trees instead of emitting a
-/// separate tree for each
+/// # Returns
+/// The block.
+#[must_use]
+fn visit_block(body: &py::Suite, ctx: &mut AstContext) -> P<rs::Block> {
+    ctx.start_block();
+    for stmt in body {
+        visit_statement(stmt, ctx);
+    }
+    ctx.finish_block()
+}
+
+/// Visits a Python return statement to emit a transpiled Rust return statement.
+/// Always makes a `return` statement, because we don't know if the return is at
+/// the end or in the middle of a function definition.
 fn visit_return(value: &Option<py::Expression>, ctx: &mut AstContext) {
-    ctx.unimplemented_parameter("return", "value", value);
+    // Figure out the return expression
+    let ret = value
+        .as_ref()
+        .map(|expr| rs::Expr::from_py(expr, ctx))
+        .map(P);
+
+    // Construct Rust AST node
+    let expr = rs::ExprKind::Ret(ret);
+    let stmt = rs::StmtKind::Semi(P(dummy::expr(expr)));
+    let rust_node = rust::NodeKind::Stmt(stmt);
+    ctx.emit(rust_node);
 }
 
 /// Visits each of the import symbols in a Python import statement.

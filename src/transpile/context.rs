@@ -107,7 +107,7 @@ impl<'py_ast> AstContext<'py_ast> {
     }
 
     /// Finish recursion into a block and return the block
-    pub fn finish_block(&mut self) -> Option<P<rs::Block>> {
+    pub fn finish_block(&mut self) -> P<rs::Block> {
         self.depth -= 1;
 
         let nodes = self
@@ -120,6 +120,8 @@ impl<'py_ast> AstContext<'py_ast> {
         for node in nodes {
             match node {
                 rust::NodeKind::ExtendedStmt(stmt) => stmts.push(stmt),
+                // Extend ordinary statements with dummy data to match the Stmt trait spec
+                rust::NodeKind::Stmt(stmt) => stmts.push(dummy::stmt(stmt)),
                 _ => self.unimplemented_parameter("block", "node", &node),
             }
         }
@@ -130,7 +132,7 @@ impl<'py_ast> AstContext<'py_ast> {
             rules: rs::BlockCheckMode::Default,
             span: dummy::span(),
         };
-        Some(P(block))
+        P(block)
     }
 
     pub fn identify_import(&self, symbol: &str) -> ImportKind {

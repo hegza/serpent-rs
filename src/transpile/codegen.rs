@@ -19,8 +19,8 @@ pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String
         match rust_node {
             rust::NodeKind::Item(item) => visit_item(None, item, &mut ctx),
             rust::NodeKind::ExtendedItem(item) => visit_item_trait(item, &mut ctx),
-            // Statements should not occur at top-level
-            rust::NodeKind::Stmt(_) | rust::NodeKind::ExtendedStmt(_) => unimplemented!(),
+            rust::NodeKind::Stmt(stmt) => visit_stmt(stmt, &mut ctx),
+            rust::NodeKind::ExtendedStmt(stmt) => visit_stmt_trait(stmt, &mut ctx),
             rust::NodeKind::Newline => ctx.emit("\n"),
             rust::NodeKind::Comment(content) => ctx.emit(&format!("//{}", content)),
         }
@@ -93,6 +93,17 @@ fn visit_item_trait(item: &rs::Item, ctx: &mut PrintContext) {
     } = item;
 
     visit_item(Some(&ident.to_string()), kind, ctx);
+}
+
+/// Visits a statement and emits it's contents
+fn visit_stmt(stmt: &rs::StmtKind, ctx: &mut PrintContext) {
+    ctx.emit(&stmt.fidelity_print(ctx))
+}
+
+fn visit_stmt_trait(stmt: &rs::Stmt, ctx: &mut PrintContext) {
+    let rs::Stmt { id, kind, span } = stmt;
+
+    visit_stmt(kind, ctx);
 }
 
 fn visit_fn(

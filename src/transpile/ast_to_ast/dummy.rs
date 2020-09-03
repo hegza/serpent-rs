@@ -21,3 +21,31 @@ pub fn attr_vec() -> ast::AttrVec {
 pub fn token(kind: ast::LitKind) -> token::Lit {
     kind.to_lit_token()
 }
+
+pub fn expr(kind: ast::ExprKind) -> ast::Expr {
+    ast::Expr {
+        id: node_id(),
+        kind,
+        span: span(),
+        attrs: attr_vec(),
+        // TODO:
+        tokens: None,
+    }
+}
+
+pub fn stmt(kind: ast::StmtKind) -> ast::Stmt {
+    ast::Stmt {
+        id: node_id(),
+        kind: kind,
+        span: span(),
+    }
+}
+
+pub fn block(stmts: Vec<ast::Stmt>) -> ast::Block {
+    ast::Block {
+        stmts,
+        id: node_id(),
+        rules: ast::BlockCheckMode::Default,
+        span: span(),
+    }
+}

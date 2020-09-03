@@ -55,7 +55,7 @@ impl UnimplementedAstNode for ListUnimplemented {
         location: &Location,
     ) {
         self.items.push(format!(
-            "{}: item `{}` for parameter `{}` with value {:?}",
+            "{}: item `{}` for parameter `{} = {:?}`",
             location, item_name, parameter_name, parameter
         ));
 
@@ -103,7 +103,7 @@ impl UnimplementedAstNode for WarnOnUnimplemented {
         location: &Location,
     ) {
         warn!(
-            "Unimplemented on {}: item `{}` for parameter `{}` with value {:?}",
+            "Unimplemented on {}: item `{}` for parameter `{} = {:?}`",
             location, item_name, parameter_name, parameter,
         );
     }
@@ -178,7 +178,7 @@ impl UnimplementedAstNode for AlwaysPanic {
         location: &Location,
     ) {
         panic!(
-            "Unimplemented on {}: item `{}` for parameter `{}` with value {:?}",
+            "Unimplemented on {}: item `{}` for parameter `{} = with value {:?}`",
             location, item_name, parameter_name, parameter,
         );
     }

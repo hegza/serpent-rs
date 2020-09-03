@@ -25,11 +25,21 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
             }
             py::ExpressionType::Subscript { a, b } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Unop { op, a } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Unop { op, a } => {
+                return into_rs_un_op(UnOp::from_py(op, ctx), a, ctx)
+            }
             py::ExpressionType::Await { value } => ctx.unimplemented_item(expr),
             py::ExpressionType::Yield { value } => ctx.unimplemented_item(expr),
             py::ExpressionType::YieldFrom { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Compare { vals, ops } => ctx.unimplemented_item(expr),
+            // A Python chained comparison, eg. `a < b` or `a < b < c`
+            py::ExpressionType::Compare { vals, ops } => {
+                if vals.len() != 2 || ops.len() != 1 {
+                    ctx.unimplemented_parameter("chained_comparison", "(vals, ops)", &(vals, ops));
+                }
+                let op = ops.first().unwrap();
+                let (a, b) = (&vals[0], &vals[1]);
+                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx);
+            }
             // An attribute maps to either a rs::ExprKind::MethodCall or a rs::ExprKind::Field, this
             // can be determined by walking the AST in a late pass
             py::ExpressionType::Attribute { value, name } => {
@@ -157,10 +167,44 @@ fn id_to_path(id: &str, ctx: &mut AstContext) -> rs::ExprKind {
     rs::ExprKind::Path(None, path)
 }
 
+fn into_rs_un_op(kind: UnOp, a: &Box<py::Expression>, ctx: &mut AstContext) -> rs::ExprKind {
+    let a = rs::Expr::from_py(a, ctx);
+
+    match kind {
+        UnOp::Ast(op) => rs::ExprKind::Unary(op, P(a)),
+        // Just return the operand itself on identity operation
+        UnOp::Identity => a.kind,
+        UnOp::Inversion => {
+            // TODO: Inversion is only defined for integers, so we could check
+            // for that in here
+
+            //  The unary ~ (invert) operator yields the bit-wise inversion of
+            // its plain or long integer argument. The bit-wise inversion of x
+            // is defined as -(x+1). It only applies to integral numbers.
+            let one_kind = rs::LitKind::Int(1, rs::LitIntType::Unsuffixed);
+            let one = dummy::expr(rs::ExprKind::Lit(rs::Lit {
+                token: dummy::token(one_kind.clone()),
+                kind: one_kind,
+                span: dummy::span(),
+            }));
+            let x_plus_one = dummy::expr(rs::ExprKind::Binary(
+                Spanned {
+                    node: rs::BinOpKind::Add,
+                    span: dummy::span(),
+                },
+                P(a),
+                P(one),
+            ));
+
+            rs::ExprKind::Unary(rs::UnOp::Not, P(x_plus_one))
+        }
+    }
+}
+
 fn into_rs_bin_op(
     kind: BinOp,
-    a: &Box<py::Expression>,
-    b: &Box<py::Expression>,
+    a: &py::Expression,
+    b: &py::Expression,
     ctx: &mut AstContext,
 ) -> rs::ExprKind {
     let a = P(rs::Expr::from_py(a, ctx));
@@ -234,6 +278,23 @@ pub(crate) enum BinMethod {
     Powi,
 }
 
+enum UnOp {
+    Ast(rs::UnOp),
+    Identity,
+    Inversion,
+}
+
+impl FromPy<py::UnaryOperator> for UnOp {
+    fn from_py(op: &py::UnaryOperator, ctx: &mut AstContext) -> Self {
+        match op {
+            py::UnaryOperator::Pos => UnOp::Identity,
+            py::UnaryOperator::Neg => UnOp::Ast(rs::UnOp::Neg),
+            py::UnaryOperator::Not => UnOp::Ast(rs::UnOp::Not),
+            py::UnaryOperator::Inv => UnOp::Inversion,
+        }
+    }
+}
+
 impl FromPy<py::Operator> for BinOp {
     fn from_py(op: &py::Operator, ctx: &mut AstContext) -> Self {
         match op {
@@ -271,6 +332,39 @@ impl FromPy<py::Operator> for BinOp {
                     "py::FloorDiv transpiled as rs::Div, this behaves incorrectly for some values"
                 );
                 BinOp::Ast(rs::BinOpKind::Div)
+            }
+        }
+    }
+}
+
+impl FromPy<py::Comparison> for BinOp {
+    fn from_py(comp: &py::Comparison, ctx: &mut AstContext) -> Self {
+        match comp {
+            // TODO: The == operator compares the values of both the operands and checks for value
+            // equality. Whereas is operator checks whether both the operands refer to the same
+            // object or not.
+            py::Comparison::Equal | py::Comparison::Is => {
+                warn!("serpent does not differentiate between Python `==` and `is`");
+                BinOp::Ast(rs::BinOpKind::Eq)
+            }
+            // TODO: The != operator compares the values of both the operands and checks for value
+            // inequality. Whereas `is not` operator checks whether both the operands refer to the
+            // same object or not.
+            py::Comparison::NotEqual | py::Comparison::IsNot => {
+                warn!("serpent does not differentiate between Python `!=` and `is not`");
+                BinOp::Ast(rs::BinOpKind::Ne)
+            }
+            py::Comparison::Less => BinOp::Ast(rs::BinOpKind::Lt),
+            py::Comparison::LessOrEqual => BinOp::Ast(rs::BinOpKind::Le),
+            py::Comparison::Greater => BinOp::Ast(rs::BinOpKind::Gt),
+            py::Comparison::GreaterOrEqual => BinOp::Ast(rs::BinOpKind::Ge),
+            py::Comparison::In => {
+                ctx.unimplemented_parameter("comparison", "comp", comp);
+                BinOp::Unimplemented
+            }
+            py::Comparison::NotIn => {
+                ctx.unimplemented_parameter("comparison", "comp", comp);
+                BinOp::Unimplemented
             }
         }
     }
