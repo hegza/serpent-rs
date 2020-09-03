@@ -130,6 +130,9 @@ fn visit_fn(
         // Start a block
         ctx.start_block();
 
+        // Add newline into function blocks by default
+        ctx.emit("\n");
+
         // Emit statements in block
         for stmt in &block.stmts {
             let mut stmt_str = stmt.fidelity_print(ctx);

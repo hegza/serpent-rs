@@ -243,7 +243,7 @@ fn visit_import_from(
     }
 
     // Merge the module path into the symbol path by mapping the module Option
-    let mut names_with_module = module.as_ref().map(|module| {
+    let names_with_module = module.as_ref().map(|module| {
         names
             .iter()
             .map(|import_symbol| {
