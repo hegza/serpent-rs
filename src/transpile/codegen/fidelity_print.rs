@@ -6,6 +6,7 @@ use rustc_ap_rustc_span::{source_map::Spanned, Symbol};
 use rustc_ast::ast as rs;
 use rustc_ast::ptr::P;
 use rustc_ast::token;
+use std::ops::Deref;
 
 /// Something that can be printed into Rust source code. Attempts to match
 /// whatever original representation as closely as possible.
@@ -33,10 +34,7 @@ impl FidelityPrint for rs::UseTree {
 impl FidelityPrint for rs::Path {
     // Join paths like `seg::seg`
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
-        self.segments
-            .iter()
-            .map(|seg| seg.fidelity_print(ctx))
-            .join("::")
+        into_formatted_list(&self.segments, "::", ctx)
     }
 }
 
@@ -125,9 +123,7 @@ impl FidelityPrint for rs::FnHeader {
 
 impl FidelityPrint for Vec<rs::Param> {
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
-        self.iter()
-            .map(|param| param.fidelity_print(ctx))
-            .join(", ")
+        into_formatted_list(self, ", ", ctx)
     }
 }
 
@@ -174,7 +170,7 @@ impl FidelityPrint for rs::Ty {
             rs::TyKind::BareFn(_) => ctx.unimplemented_print(self),
             rs::TyKind::Never => format!("!"),
             rs::TyKind::Tup(tuple) => {
-                "(".to_owned() + &tuple.iter().map(|t| t.fidelity_print(ctx)).join(", ") + ")"
+                "(".to_owned() + &into_formatted_list(&tuple, ", ", ctx) + ")"
             }
             rs::TyKind::Path(_, _) => ctx.unimplemented_print(self),
             rs::TyKind::TraitObject(_, _) => ctx.unimplemented_print(self),
@@ -243,17 +239,19 @@ impl FidelityPrint for rs::Lit {
 
 impl FidelityPrint for token::Lit {
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        let sym = self.symbol.to_string();
+
         match self.kind {
-            token::LitKind::Bool => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Byte => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Char => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Integer => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Float => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Str => format!("\"{}\"", self.symbol.fidelity_print(ctx)),
-            token::LitKind::StrRaw(_) => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::ByteStr => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::ByteStrRaw(_) => ctx.unimplemented_print(&self.symbol),
-            token::LitKind::Err => ctx.unimplemented_print(&self.symbol),
+            token::LitKind::Bool => format!("{}", sym),
+            token::LitKind::Byte => format!("b\"{}\"", sym),
+            token::LitKind::Char => format!("'{}'", sym),
+            token::LitKind::Integer => format!("{}", sym),
+            token::LitKind::Float => format!("{}", sym),
+            token::LitKind::Str => format!("\"{}\"", sym),
+            token::LitKind::StrRaw(_) => format!("r\"{}\"", sym),
+            token::LitKind::ByteStr => format!("b\"{}\"", sym),
+            token::LitKind::ByteStrRaw(_) => ctx.unimplemented_print(self),
+            token::LitKind::Err => format!("Err( {:?} )", sym),
         }
     }
 }
@@ -297,23 +295,103 @@ impl FidelityPrint for rs::Expr {
 impl FidelityPrint for rs::ExprKind {
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
         match self {
-            rs::ExprKind::Box(_) => ctx.unimplemented_print(self),
-            rs::ExprKind::Array(_) => ctx.unimplemented_print(self),
-            rs::ExprKind::Call(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::MethodCall(_, _, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Tup(_) => ctx.unimplemented_print(self),
+            rs::ExprKind::Box(expr) => format!("box {}", expr.fidelity_print(ctx)),
+            rs::ExprKind::Array(elems) => {
+                let elems = into_formatted_list(elems, ", ", ctx);
+                format!("[{}]", elems)
+            }
+            rs::ExprKind::Call(func, args) => {
+                let args = into_formatted_list(args, ", ", ctx);
+                format!(
+                    "{func}({args})",
+                    func = func.fidelity_print(ctx),
+                    args = args
+                )
+            }
+            // A call to a method with a receiver. Note that the first element of `args` is the
+            // receiver object.
+            rs::ExprKind::MethodCall(name_and_generics, args, _span) => {
+                let receiver = match args.first() {
+                    Some(arg) => arg,
+                    None => {
+                        ctx.unimplemented(self);
+                        unimplemented!()
+                    }
+                };
+
+                let rs::PathSegment {
+                    ident: fn_name,
+                    args: generics,
+                    id: _id,
+                } = name_and_generics;
+
+                match generics {
+                    None => format!(
+                        "{receiver}.{fn_name}({args})",
+                        receiver = receiver.fidelity_print(ctx),
+                        fn_name = fn_name.fidelity_print(ctx),
+                        args = into_formatted_list(args, ", ", ctx)
+                    ),
+                    Some(generics) => format!(
+                        "{receiver}.{fn_name}::{generics_str}({args})",
+                        receiver = receiver.fidelity_print(ctx),
+                        fn_name = fn_name.fidelity_print(ctx),
+                        generics_str = generics.fidelity_print(ctx),
+                        args = into_formatted_list(args, ", ", ctx)
+                    ),
+                }
+            }
+            rs::ExprKind::Tup(tuple) => format!("({})", into_formatted_list(tuple, ", ", ctx)),
             rs::ExprKind::Binary(op, a, b) => format!(
                 "{a} {op} {b}",
                 op = op.fidelity_print(ctx),
                 a = a.fidelity_print(ctx),
                 b = b.fidelity_print(ctx)
             ),
-            rs::ExprKind::Unary(_, _) => ctx.unimplemented_print(self),
+            rs::ExprKind::Unary(op, expr) => format!(
+                "{}{}",
+                op = op.fidelity_print(ctx),
+                expr = expr.fidelity_print(ctx)
+            ),
             rs::ExprKind::Lit(lit) => lit.fidelity_print(ctx),
-            rs::ExprKind::Cast(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Type(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Let(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::If(_, _, _) => ctx.unimplemented_print(self),
+            rs::ExprKind::Cast(expr, as_ty) => format!(
+                "{} as {}",
+                expr.fidelity_print(ctx),
+                as_ty.fidelity_print(ctx)
+            ),
+            rs::ExprKind::Type(expr, ty) => {
+                format!("{}: {}", expr.fidelity_print(ctx), ty.fidelity_print(ctx))
+            }
+            // Let binding **expression** that is only semantically allowed in if/while expressions,
+            // eg. `if let 0 = x {}`
+            rs::ExprKind::Let(binding, expr) => format!(
+                "let {} = {}",
+                binding.fidelity_print(ctx),
+                expr.fidelity_print(ctx)
+            ),
+            rs::ExprKind::If(if_expr, block, else_block) => {
+                warn!("fidelity_print.rs - `impl FidelityPrint for rs::ExprKind {{... match self ... rs::ExprKind::If` workaround block complexity by using context to carefully emit, then return an empty string");
+
+                // HACK: workaround block complexity by using context to carefully emit, then
+                // return an empty string
+                let if_expr = format!("if {}", if_expr.fidelity_print(ctx));
+                ctx.emit(&if_expr);
+
+                // Hit a space between the if expr and the consequent block
+                ctx.emit(" ");
+
+                // Emit from '{' to '}'
+                super::visit_block(block, ctx);
+
+                if let Some(block) = else_block {
+                    // Hit a newline between block and the else expression
+                    ctx.emit("\n");
+                    let s = block.fidelity_print(ctx);
+                    ctx.emit(&format!("else {}", s));
+                }
+
+                "".to_owned()
+            }
             rs::ExprKind::While(_, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::ForLoop(_, _, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Loop(_, _) => ctx.unimplemented_print(self),
@@ -328,11 +406,17 @@ impl FidelityPrint for rs::ExprKind {
             rs::ExprKind::Field(_, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Index(_, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Range(_, _, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Path(_, _) => ctx.unimplemented_print(self),
+            rs::ExprKind::Path(qself, path) => match qself {
+                Some(_) => ctx.unimplemented_print(self),
+                None => path.fidelity_print(ctx),
+            },
             rs::ExprKind::AddrOf(_, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Break(_, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Continue(_) => ctx.unimplemented_print(self),
-            rs::ExprKind::Ret(_) => ctx.unimplemented_print(self),
+            rs::ExprKind::Ret(val) => match val {
+                None => "return".to_owned(),
+                Some(val) => format!("return {}", val.fidelity_print(ctx)),
+            },
             rs::ExprKind::InlineAsm(_) => ctx.unimplemented_print(self),
             rs::ExprKind::LlvmInlineAsm(_) => ctx.unimplemented_print(self),
             rs::ExprKind::MacCall(_) => ctx.unimplemented_print(self),
@@ -346,9 +430,98 @@ impl FidelityPrint for rs::ExprKind {
     }
 }
 
-impl FidelityPrint for Spanned<rs::BinOpKind> {
+impl FidelityPrint for rs::GenericArgs {
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
-        self.node.fidelity_print(ctx)
+        match self {
+            rs::GenericArgs::AngleBracketed(args) => args.fidelity_print(ctx),
+            rs::GenericArgs::Parenthesized(args) => args.fidelity_print(ctx),
+        }
+    }
+}
+
+impl FidelityPrint for rs::AngleBracketedArgs {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        let args = into_formatted_list(&self.args, ", ", ctx);
+        format!("<{}>", args)
+    }
+}
+
+impl FidelityPrint for rs::AngleBracketedArg {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        match self {
+            rs::AngleBracketedArg::Arg(generic_arg) => generic_arg.fidelity_print(ctx),
+            rs::AngleBracketedArg::Constraint(constraint) => constraint.fidelity_print(ctx),
+        }
+    }
+}
+
+impl FidelityPrint for rs::GenericArg {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        match self {
+            rs::GenericArg::Lifetime(lt) => lt.fidelity_print(ctx),
+            rs::GenericArg::Type(ty) => ty.fidelity_print(ctx),
+            rs::GenericArg::Const(anon_const) => anon_const.fidelity_print(ctx),
+        }
+    }
+}
+
+impl FidelityPrint for rs::Lifetime {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        // Add preceding apostrophe
+        format!("'{}", self.ident.fidelity_print(ctx))
+    }
+}
+
+impl FidelityPrint for rs::AnonConst {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        self.value.fidelity_print(ctx)
+    }
+}
+
+impl FidelityPrint for rs::AssocTyConstraint {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        match &self.kind {
+            rs::AssocTyConstraintKind::Equality { ty } => format!(
+                "{} = {}",
+                self.ident.fidelity_print(ctx),
+                ty.fidelity_print(ctx)
+            ),
+            rs::AssocTyConstraintKind::Bound { bounds } => format!(
+                "{}: {}",
+                self.ident.fidelity_print(ctx),
+                into_formatted_list(&bounds, " + ", ctx)
+            ),
+        }
+    }
+}
+
+impl FidelityPrint for rs::GenericBound {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        match self {
+            rs::GenericBound::Trait(_, _) => ctx.unimplemented_print(self),
+            rs::GenericBound::Outlives(_) => ctx.unimplemented_print(self),
+        }
+    }
+}
+
+impl FidelityPrint for rs::ParenthesizedArgs {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        let inputs = into_formatted_list(&self.inputs, ", ", ctx);
+        let output = self.output.fidelity_print(ctx);
+
+        format!("({}) -> {}", inputs, output)
+    }
+}
+
+impl FidelityPrint for rs::UnOp {
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        let s = match self {
+            rs::UnOp::Deref => "*",
+            rs::UnOp::Not => "!",
+            rs::UnOp::Neg => "-",
+        };
+
+        s.to_owned()
     }
 }
 
@@ -377,4 +550,32 @@ impl FidelityPrint for rs::BinOpKind {
 
         s.to_owned()
     }
+}
+
+/// Blanket implementation for pointers to FidelityPrint types
+impl<T> FidelityPrint for P<T>
+where
+    T: FidelityPrint,
+{
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        self.deref().fidelity_print(ctx)
+    }
+}
+
+/// Blanket implementation for Spanned versions of FidelityPrint types, because
+/// we don't care about Spans.
+impl<T> FidelityPrint for Spanned<T>
+where
+    T: FidelityPrint,
+{
+    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
+        self.node.fidelity_print(ctx)
+    }
+}
+
+fn into_formatted_list<T>(list: &[T], sep: &str, ctx: &mut PrintContext) -> String
+where
+    T: FidelityPrint,
+{
+    list.iter().map(|arg| arg.fidelity_print(ctx)).join(sep)
 }

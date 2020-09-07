@@ -127,22 +127,7 @@ fn visit_fn(
         // Hit a space between a function signature and it's block
         ctx.emit(" ");
 
-        // Start a block
-        ctx.start_block();
-
-        // Add newline into function blocks by default
-        ctx.emit("\n");
-
-        // Emit statements in block
-        for stmt in &block.stmts {
-            let mut stmt_str = stmt.fidelity_print(ctx);
-            // Add a newline to each statement
-            stmt_str.push('\n');
-            ctx.emit(&stmt_str);
-        }
-
-        // Finish block
-        ctx.finish_block();
+        visit_block(block, ctx);
 
         // Hit a newline after finishing a function block
         ctx.emit("\n");
@@ -151,4 +136,25 @@ fn visit_fn(
     else {
         ctx.emit(";");
     }
+}
+
+/// Visits a block, starting from the emission of '{' and ending with emission
+/// of '}'
+fn visit_block(block: &rs::Block, ctx: &mut PrintContext) {
+    // Start a block
+    ctx.start_block();
+
+    // Add newline into function blocks by default
+    ctx.emit("\n");
+
+    // Emit statements in block
+    for stmt in &block.stmts {
+        let mut stmt_str = stmt.fidelity_print(ctx);
+        // Add a newline to each statement
+        stmt_str.push('\n');
+        ctx.emit(&stmt_str);
+    }
+
+    // Finish block
+    ctx.finish_block();
 }
