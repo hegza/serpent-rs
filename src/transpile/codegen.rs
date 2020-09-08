@@ -6,8 +6,6 @@ use super::{
 };
 use crate::{error::ExpandError, transpile::rust};
 use fidelity_print::{FidelityPrint, FnSignature};
-use itertools::Itertools;
-use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::ast as rs;
 use rustc_ast::ptr::P;

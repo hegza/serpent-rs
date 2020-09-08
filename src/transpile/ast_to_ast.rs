@@ -7,12 +7,10 @@ use super::context::ImportKind;
 use crate::error::TranspileNodeError;
 use crate::transpile::{context::AstContext, python, rust};
 use from_py::FromPy;
-use log::warn;
 use py::Located;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
-use std::slice::Iter;
 
 /// A type alias for `Result<T, serpent::error::TranspileNodeError>`.
 pub type Result<T> = std::result::Result<T, TranspileNodeError>;

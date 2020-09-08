@@ -1,4 +1,3 @@
-use super::util;
 use rustc_ap_rustc_ast::ast;
 use rustc_ap_rustc_ast::{node_id, token};
 use rustc_ap_rustc_data_structures::thin_vec::ThinVec;

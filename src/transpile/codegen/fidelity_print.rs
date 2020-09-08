@@ -2,7 +2,7 @@ use crate::transpile::context::PrintContext;
 use itertools::Itertools;
 use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
-use rustc_ap_rustc_span::{source_map::Spanned, Symbol};
+use rustc_ap_rustc_span::source_map::Spanned;
 use rustc_ast::ast as rs;
 use rustc_ast::ptr::P;
 use rustc_ast::token;
@@ -253,12 +253,6 @@ impl FidelityPrint for token::Lit {
             token::LitKind::ByteStrRaw(_) => ctx.unimplemented_print(self),
             token::LitKind::Err => format!("Err( {:?} )", sym),
         }
-    }
-}
-
-impl FidelityPrint for Symbol {
-    fn fidelity_print(&self, ctx: &mut PrintContext) -> String {
-        self.to_string()
     }
 }
 

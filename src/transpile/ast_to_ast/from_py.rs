@@ -7,7 +7,7 @@ use crate::transpile::context::AstContext;
 use log::warn;
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ap_rustc_span::source_map::Spanned;
-use rustc_ast::{ast as rs, ptr::P, token};
+use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
 
 /// Like `std::convert::From` but for Python AST node conversion into Rust. Does

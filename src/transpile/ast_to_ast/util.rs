@@ -1,5 +1,5 @@
 use rustc_ap_rustc_ast::ast;
-use rustc_ap_rustc_span::{symbol, Span, DUMMY_SP};
+use rustc_ap_rustc_span::symbol;
 
 use super::dummy;
 
