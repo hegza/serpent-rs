@@ -21,7 +21,7 @@
 //! }
 //! ```
 mod error;
-mod output;
+pub mod output;
 mod py_module;
 mod transpile;
 
@@ -29,7 +29,7 @@ pub use crate::error::{SerpentError, TranspileError};
 pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
-use output::TranspiledString;
+use output::{TranspiledModule, TranspiledString};
 use std::{fs, path};
 use transpile::transpile_module_dir;
 
@@ -88,7 +88,7 @@ pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString> 
 /// #    Ok(())
 /// }
 /// ```
-pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<Vec<(path::PathBuf, String)>> {
+pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspiledModule> {
     transpile_module_dir(dir_path)
 }
 

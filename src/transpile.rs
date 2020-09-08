@@ -6,7 +6,10 @@ mod parser_ext;
 pub mod python;
 pub mod rust;
 
-use crate::{error::SerpentError, output::TranspiledString, PyModule};
+use crate::{
+    error::SerpentError, output::ModPath, output::TranspiledFile, output::TranspiledModule,
+    output::TranspiledString, PyModule,
+};
 use ast_to_ast::TranspileNode;
 use config::TranspileConfig;
 use context::{AstContext, ProgramContext};
@@ -57,26 +60,34 @@ pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString, 
 /// Transpiles a module from the given directory to Rust.
 pub fn transpile_module_dir(
     dir_path: impl AsRef<path::Path>,
-) -> Result<Vec<(path::PathBuf, String)>, SerpentError> {
+) -> Result<TranspiledModule, SerpentError> {
     let py_module = PyModule::from_dir_path(dir_path)?;
     let files = py_module.files();
 
     // Transpile files one-by-one
     let mut prog_ctx = ProgramContext::new(&py_module);
     let mut transpiled_sources = Vec::with_capacity(files.len());
-    for path in &files {
+    for py_path in &files {
         // Transpile this file
-        let transpiled = transpile_file(path, &mut prog_ctx)?;
-        transpiled_sources.push((path.clone(), transpiled));
+        let transpiled = transpile_file(py_path, &mut prog_ctx)?;
+        let mod_path =
+            ModPath::from_py_module_symbol(py_module.module_symbol_for_file(py_path).unwrap());
+
+        transpiled_sources.push((mod_path, transpiled));
 
         // Next file
         prog_ctx.advance();
     }
 
-    Ok(transpiled_sources)
+    let out = TranspiledModule::from_paths_and_files(transpiled_sources);
+
+    Ok(out)
 }
 
-fn transpile_file(path: &path::PathBuf, ctx: &mut ProgramContext) -> Result<String, SerpentError> {
+fn transpile_file(
+    path: &path::PathBuf,
+    ctx: &mut ProgramContext,
+) -> Result<TranspiledFile, SerpentError> {
     info!("Parsing {:?} into Python AST", path);
 
     // Parse file into an AST
@@ -90,23 +101,38 @@ fn transpile_file(path: &path::PathBuf, ctx: &mut ProgramContext) -> Result<Stri
 
     // Transform the Python AST into a Rust AST
     let cfg = TranspileConfig::default();
-    let out_str: Result<String, SerpentError> = with_default_session_globals(|| {
-        let mut ast_ctx = AstContext::new(&relative_mod_symbols, &ast, &cfg);
-        for node in &ast {
-            node.transpile(&mut ast_ctx).map_err(|inner| {
+    let result: Result<(Vec<rust::NodeKind>, String), SerpentError> =
+        with_default_session_globals(|| {
+            let mut ast_ctx = AstContext::new(&relative_mod_symbols, &ast, &cfg);
+            for node in &ast {
+                node.transpile(&mut ast_ctx).map_err(|inner| {
+                    inner.with_source(&content, Some(path.to_string_lossy().to_string()))
+                })?;
+            }
+
+            let rust_ast = ast_ctx.finish().map_err(|inner| {
                 inner.with_source(&content, Some(path.to_string_lossy().to_string()))
             })?;
-        }
 
-        let rust_ast = ast_ctx.finish().map_err(|inner| {
-            inner.with_source(&content, Some(path.to_string_lossy().to_string()))
-        })?;
+            // Print the Rust AST as code
+            let rust_code =
+                codegen::ast_to_rust(&rust_ast, &cfg).map_err(|inner| SerpentError::from(inner))?;
+            Ok((rust_ast, rust_code))
+        });
 
-        codegen::ast_to_rust(&rust_ast, &cfg).map_err(|inner| SerpentError::from(inner))
-    });
+    let (rust_ast, out_str) = result?;
 
-    // Print the Rust AST as code
-    Ok(out_str?)
+    let out = TranspiledFile(
+        path.to_owned(),
+        TranspiledString {
+            python_source: content,
+            python_ast: ast,
+            rust_ast,
+            rust_target: out_str,
+        },
+    );
+
+    Ok(out)
 }
 
 fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, SerpentError> {

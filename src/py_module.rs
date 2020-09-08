@@ -107,6 +107,14 @@ impl PyModule {
     pub fn files(&self) -> Vec<path::PathBuf> {
         self.files.values().cloned().collect::<Vec<path::PathBuf>>()
     }
+    pub fn module_symbol_for_file(&self, x: &path::PathBuf) -> Option<&str> {
+        for (symbol, path) in &self.files {
+            if x == path {
+                return Some(symbol);
+            }
+        }
+        None
+    }
 }
 
 #[derive(ThisError, Debug)]

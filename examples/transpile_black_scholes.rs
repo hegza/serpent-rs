@@ -40,9 +40,9 @@ fn main() -> Result<()> {
 
     let transpiled = transpile_module(DIR)
         .context(format!("unable to transpile module from path: \"{}\"", DIR))?;
-    for t in transpiled {
-        let program = SourceView(&t.1, Language::Rust, true);
-        println!("Transpiled Rust source code for {:?}:\n{}", t.0, program);
+    for serpent::output::TranspiledFile(path, transpiled) in transpiled.files {
+        let program = SourceView(&transpiled.as_str(), Language::Rust, true);
+        println!("Transpiled Rust source code for {:?}:\n{}", path, program);
     }
 
     Ok(())
