@@ -47,6 +47,14 @@ pub enum SerpentError {
     /// An error that occurred while expanding a Rust AST into Rust source code.
     #[error("Rust AST expansion error")]
     Expand(#[from] ExpandError),
+    #[error(
+        "Requested for line {requested} in {file:?} but the file has {actual_line_count} lines"
+    )]
+    LineParameter {
+        requested: u64,
+        file: String,
+        actual_line_count: u64,
+    },
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
