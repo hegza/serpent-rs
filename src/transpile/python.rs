@@ -3,7 +3,7 @@ use rustpython_parser::{ast, ast::Located, location::Location};
 /// A statement, newline or comment of Python with a start location.
 /// Everything that's required to create an expression in Rust.
 #[derive(Debug)]
-pub(crate) enum NodeKind {
+pub enum NodeKind {
     Statement(Located<ast::StatementType>),
     Newline(Location),
     Comment(Located<String>),
@@ -15,7 +15,7 @@ impl From<ast::Statement> for NodeKind {
     }
 }
 
-pub(crate) trait Node {
+pub trait Node {
     fn location(&self) -> &Location;
 }
 

@@ -21,6 +21,7 @@
 //! }
 //! ```
 mod error;
+mod output;
 mod py_module;
 mod transpile;
 
@@ -28,6 +29,7 @@ pub use crate::error::{SerpentError, TranspileError};
 pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
+use output::TranspiledString;
 use std::{fs, path};
 use transpile::transpile_module_dir;
 
@@ -65,7 +67,7 @@ pub enum ProgramKind {
 /// #    Ok(result)
 /// # }
 /// ```
-pub fn transpile_str(src: &str, infer_main: bool) -> Result<String> {
+pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString> {
     transpile::transpile_str(src, infer_main)
 }
 
@@ -90,21 +92,21 @@ pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<Vec<(path::P
     transpile_module_dir(dir_path)
 }
 
-pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<String> {
+pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledString> {
     let path = file_path.as_ref();
     let content = fs::read_to_string(path)?;
-    transpile_str(&content, false)
+    transpile_str(content, false)
 }
 
 /// Transpiles a single line in a file without any additional context
 pub fn transpile_standalone_line_in_file(
     file_path: impl AsRef<path::Path>,
     line: u64,
-) -> Result<String> {
+) -> Result<TranspiledString> {
     let path = file_path.as_ref();
     let content = fs::read_to_string(path)?;
     match content.lines().nth(line as usize) {
-        Some(line_content) => transpile_str(&line_content, false),
+        Some(line_content) => transpile_str(line_content.to_owned(), false),
         None => Err(SerpentError::LineParameter {
             requested: line,
             file: path.to_str().unwrap().to_owned(),

@@ -3,10 +3,10 @@ mod codegen;
 mod config;
 mod context;
 mod parser_ext;
-mod python;
-mod rust;
+pub mod python;
+pub mod rust;
 
-use crate::{error::SerpentError, PyModule};
+use crate::{error::SerpentError, output::TranspiledString, PyModule};
 use ast_to_ast::TranspileNode;
 use config::TranspileConfig;
 use context::{AstContext, ProgramContext};
@@ -25,8 +25,8 @@ use std::{fs, path};
 ///
 /// * `infer_main` - Whether to create a runnable main function from
 ///   free-standing Python code.
-pub fn transpile_str(src: &str, infer_main: bool) -> Result<String, SerpentError> {
-    let py_nodes = parse_str_to_py_ast(src)?;
+pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString, SerpentError> {
+    let py_nodes = parse_str_to_py_ast(&src)?;
     let cfg = TranspileConfig::default();
 
     // The Python program is a sequence of statements, comments, and newlines
@@ -36,7 +36,7 @@ pub fn transpile_str(src: &str, infer_main: bool) -> Result<String, SerpentError
     for py_node in &py_nodes {
         py_node
             .transpile(&mut context)
-            .map_err(|inner| inner.with_source(src, None))?;
+            .map_err(|inner| inner.with_source(&src, None))?;
     }
 
     let rust_ast = context
@@ -45,7 +45,13 @@ pub fn transpile_str(src: &str, infer_main: bool) -> Result<String, SerpentError
 
     let out_str = codegen::ast_to_rust(&rust_ast, &cfg)?;
 
-    Ok(out_str)
+    let out = TranspiledString {
+        python_source: src,
+        python_ast: py_nodes,
+        rust_ast,
+        rust_target: out_str,
+    };
+    Ok(out)
 }
 
 /// Transpiles a module from the given directory to Rust.
