@@ -28,7 +28,7 @@ use std::{fs, path};
 ///
 /// * `infer_main` - Whether to create a runnable main function from
 ///   free-standing Python code.
-pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString, SerpentError> {
+pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspiledString, SerpentError> {
     let py_nodes = parse_str_to_py_ast(&src)?;
     let cfg = TranspileConfig::default();
 
@@ -49,7 +49,7 @@ pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString, 
     let out_str = codegen::ast_to_rust(&rust_ast, &cfg)?;
 
     let out = TranspiledString {
-        python_source: src,
+        python_source: src.to_owned(),
         python_ast: py_nodes,
         rust_ast,
         rust_target: out_str,

@@ -51,9 +51,9 @@ pub enum SerpentError {
         "Requested for line {requested} in {file:?} but the file has {actual_line_count} lines"
     )]
     LineParameter {
-        requested: u64,
+        requested: usize,
         file: String,
-        actual_line_count: u64,
+        actual_line_count: usize,
     },
     /// Hints that destructuring should not be exhaustive.
     ///

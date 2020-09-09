@@ -67,7 +67,7 @@ pub enum ProgramKind {
 /// #    Ok(result)
 /// # }
 /// ```
-pub fn transpile_str(src: String, infer_main: bool) -> Result<TranspiledString> {
+pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspiledString> {
     transpile::transpile_str(src, infer_main)
 }
 
@@ -95,22 +95,22 @@ pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspiledMo
 pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledString> {
     let path = file_path.as_ref();
     let content = fs::read_to_string(path)?;
-    transpile_str(content, false)
+    transpile_str(&content, false)
 }
 
 /// Transpiles a single line in a file without any additional context
 pub fn transpile_standalone_line_in_file(
     file_path: impl AsRef<path::Path>,
-    line: u64,
+    line: usize,
 ) -> Result<TranspiledString> {
     let path = file_path.as_ref();
     let content = fs::read_to_string(path)?;
     match content.lines().nth(line as usize) {
-        Some(line_content) => transpile_str(line_content.to_owned(), false),
+        Some(line_content) => transpile_str(line_content, false),
         None => Err(SerpentError::LineParameter {
             requested: line,
             file: path.to_str().unwrap().to_owned(),
-            actual_line_count: content.lines().count() as u64,
+            actual_line_count: content.lines().count(),
         }),
     }
 }
