@@ -25,19 +25,17 @@ pub(crate) trait TranspileNode {
 /// newlines) into Rust.
 impl TranspileNode for python::NodeKind {
     fn transpile(&self, ctx: &mut AstContext) -> Result<()> {
-        use python::NodeKind;
-
         match &self {
             // Recurse into subexpressions
-            NodeKind::Statement(stmt) => {
+            python::NodeKind::Statement(stmt) => {
                 visit_statement(&stmt, ctx);
             }
             // A newline is a newline
-            NodeKind::Newline(_loc) => {
+            python::NodeKind::Newline(_loc) => {
                 ctx.emit(rust::NodeKind::Newline);
             }
             // A comment is a comment
-            NodeKind::Comment(Located { node, .. }) => {
+            python::NodeKind::Comment(Located { node, .. }) => {
                 ctx.emit(rust::NodeKind::Comment(node.to_owned()));
             }
         }
