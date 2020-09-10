@@ -35,7 +35,7 @@ pub fn expr(kind: ast::ExprKind) -> ast::Expr {
 pub fn stmt(kind: ast::StmtKind) -> ast::Stmt {
     ast::Stmt {
         id: node_id(),
-        kind: kind,
+        kind,
         span: span(),
     }
 }

@@ -21,15 +21,17 @@
 //! }
 //! ```
 mod error;
+mod fmt;
 pub mod output;
 mod py_module;
 mod transpile;
 
 pub use crate::error::{SerpentError, TranspileError};
+pub use crate::output::{ModPath, TranspiledFile, TranspiledModule, TranspiledString};
 pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
-use output::{TranspiledModule, TranspiledString};
+use rustc_ap_rustc_span::with_default_session_globals;
 use std::{fs, path};
 use transpile::transpile_module_dir;
 
@@ -72,7 +74,6 @@ pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspiledString> {
 }
 
 /// Transpiles a Python module from given directory to Rust.
-/// TODO: produce a project instead of a string.
 ///
 /// Basic usage with `anyhow`.
 ///
@@ -92,10 +93,13 @@ pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspiledMo
     transpile_module_dir(dir_path)
 }
 
-pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledString> {
-    let path = file_path.as_ref();
-    let content = fs::read_to_string(path)?;
-    transpile_str(&content, false)
+pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledFile> {
+    with_default_session_globals(|| {
+        let path = file_path.as_ref();
+        let content = fs::read_to_string(path)?;
+        let transpiled = transpile_str(&content, false)?;
+        Ok(TranspiledFile(path.to_path_buf(), transpiled))
+    })
 }
 
 /// Transpiles a single line in a file without any additional context

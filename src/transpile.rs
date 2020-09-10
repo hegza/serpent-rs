@@ -1,4 +1,4 @@
-mod ast_to_ast;
+pub mod ast_to_ast;
 mod codegen;
 mod config;
 mod context;

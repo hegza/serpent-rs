@@ -2,7 +2,7 @@ use rustpython_parser::{ast, ast::Located, location::Location};
 
 /// A statement, newline or comment of Python with a start location.
 /// Everything that's required to create an expression in Rust.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NodeKind {
     Statement(Located<ast::StatementType>),
     Newline(Location),
