@@ -1,4 +1,4 @@
-mod py;
+pub mod py;
 mod rs;
 
 use std::fmt;

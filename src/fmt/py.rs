@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 
 use crate::fmt::AstString;
 use crate::transpile::python;
@@ -7,49 +7,28 @@ use py::Located;
 use rustpython_parser::ast as py;
 use rustpython_parser::location::Location;
 
-const SHOW_LOCATION: bool = false;
+#[derive(PartialEq)]
+pub struct InvisibleLocation<T>(Located<T>);
 
-impl<'a> AstString for &Vec<python::NodeKind> {
-    fn to_ast_string(&self) -> String {
-        let elems = self.iter().map(|elem| elem.to_ast_string()).join(", ");
-        format!("[{}]", elems)
-    }
-}
-
-impl AstString for python::NodeKind {
-    fn to_ast_string(&self) -> String {
-        match self {
-            python::NodeKind::Statement(stmt) => {
-                format!("Statement {{ {} }}", stmt.to_ast_string())
-            }
-            python::NodeKind::Newline(loc) => format!("Newline {:?}", loc.to_ast_string()),
-            python::NodeKind::Comment(s) => {
-                format!("Comment {} {{ {:?} }}", s.location.to_ast_string(), s.node)
-            }
-        }
-    }
-}
-
-impl AstString for Location {
-    fn to_ast_string(&self) -> String {
-        format!("[{}, {}]", self.row(), self.column())
-    }
-}
-
-impl<T> AstString for Located<T>
+impl<T> fmt::Debug for InvisibleLocation<T>
 where
-    T: AstString,
+    T: fmt::Debug,
 {
-    fn to_ast_string(&self) -> String {
-        if SHOW_LOCATION {
-            // Prefix the debug print with the location
-            let loc = self.location;
-            format!("{} {}", loc.to_ast_string(), self.node.to_ast_string())
-        } else {
-            // Hide the location from the debug print
-            format!("{}", self.node.to_ast_string())
-        }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0.node)
     }
 }
 
-impl AstString for py::StatementType {}
+impl<T> From<Located<T>> for InvisibleLocation<T> {
+    fn from(l: Located<T>) -> Self {
+        Self(l)
+    }
+}
+
+impl<T> std::ops::Deref for InvisibleLocation<T> {
+    type Target = Located<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
