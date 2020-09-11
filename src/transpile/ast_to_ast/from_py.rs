@@ -24,7 +24,13 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::Binop { a, op, b } => {
                 return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
             }
-            py::ExpressionType::Subscript { a, b } => ctx.unimplemented_item(expr),
+            // Python subscript `a[b]` converts to Rust Index `a[b]`.
+            py::ExpressionType::Subscript { a, b } => {
+                let path = rs::Expr::from_py(a, ctx);
+                let index = rs::Expr::from_py(b, ctx);
+
+                return rs::ExprKind::Index(P(path), P(index));
+            }
             py::ExpressionType::Unop { op, a } => {
                 return into_rs_un_op(UnOp::from_py(op, ctx), a, ctx)
             }
@@ -53,13 +59,38 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::Number { value } => {
                 return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
             }
-            py::ExpressionType::List { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Tuple { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::List { elements } =>
+            // A `vec![]` expression is a sensible default for a list expression
+            {
+                return into_rs_array(elements, ctx)
+            }
+            py::ExpressionType::Tuple { elements } => {
+                return rs::ExprKind::Tup(
+                    elements
+                        .iter()
+                        .map(|e| P(rs::Expr::from_py(e, ctx)))
+                        .collect::<Vec<P<rs::Expr>>>(),
+                )
+            }
             py::ExpressionType::Dict { elements } => ctx.unimplemented_item(expr),
             py::ExpressionType::Set { elements } => ctx.unimplemented_item(expr),
             py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_item(expr),
             py::ExpressionType::Starred { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Slice { elements } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Slice { elements } => {
+                if elements[2].node != py::ExpressionType::None {
+                    unimplemented!("step argument in slice is not supported: {:?}", expr);
+                }
+                let start = rs::Expr::from_py(&elements[0], ctx);
+                let end = rs::Expr::from_py(&elements[1], ctx);
+                // NOTE: use half-open range by default
+                // TODO: figure out if a closed range can be specified in Python, and use that
+                // here then
+                return rs::ExprKind::Range(
+                    Some(P(start)),
+                    Some(P(end)),
+                    rs::RangeLimits::HalfOpen,
+                );
+            }
             py::ExpressionType::String { value } => {
                 return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
             }
@@ -86,11 +117,43 @@ impl FromPy<py::Expression> for rs::ExprKind {
     }
 }
 
+fn into_rs_array(elements: &[py::Expression], ctx: &mut AstContext) -> rs::ExprKind {
+    rs::ExprKind::Array(
+        elements
+            .iter()
+            .map(|expr| P(rs::Expr::from_py(expr, ctx)))
+            .collect::<Vec<P<rs::Expr>>>(),
+    )
+}
+
+// FIXME: can't generate rs_vec_macro, because tokens are not available
+/*
+fn into_rs_vec_macro(elements: &[py::Expression], ctx: &mut AstContext) -> rs::MacCall {
+    let args = elements
+        .iter()
+        .map(|expr| {
+            let rs_expr = rs::ExprKind::from_py(expr, ctx);
+        })
+        .collect::<Vec<rs::ExprKind>>();
+    let args = rs::MacArgs::Delimited(
+        rustc_ast::tokenstream::DelimSpan::dummy(),
+        rs::MacDelimiter::Bracket,
+        args,
+    );
+    rs::MacCall {
+        path: "vec",
+        args,
+        prior_type_ascription: None,
+    }
+}
+*/
+
 impl FromPy<py::Expression> for rs::PatKind {
     fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
         match &expr.node {
             py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Binop { a, op, b } => ctx.unimplemented_pat(expr),
+            // A subscript as a pattern does not exist in Rust; this requires another solution
             py::ExpressionType::Subscript { a, b } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Unop { op, a } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Await { value } => ctx.unimplemented_pat(expr),
@@ -105,7 +168,8 @@ impl FromPy<py::Expression> for rs::PatKind {
             } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Number { value } => ctx.unimplemented_pat(expr),
             py::ExpressionType::List { elements } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Tuple { elements } => ctx.unimplemented_pat(expr),
+            // Assignment to tuple in Python becomes an assignment to tuple in Rust
+            py::ExpressionType::Tuple { elements } => rs::PatKind::Tuple(elements.iter().map(|e| rs::Pat::from_py(e, ctx)).map(P).collect::<Vec<P<rs::Pat>>>()),
             py::ExpressionType::Dict { elements } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Set { elements } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_pat(expr),
@@ -431,18 +495,15 @@ impl FromPy<f64> for rs::LitKind {
 
 impl FromPy<num_bigint::BigInt> for rs::LitKind {
     fn from_py(bigint: &num_bigint::BigInt, ctx: &mut AstContext) -> Self {
-        let (sign, data) = bigint.to_u32_digits();
-        let value = {
-            if data.len() == 1 {
-                *data.first().unwrap()
-            } else {
-                // FIXME: handle ints larger than u32, maybe use bigint::u32_to_u128
-                unimplemented!("integer literal is too large, not handled")
-            }
-        };
+        // HACK: workaround bigints via string conversion
+        let value: u128 = format!("{}", bigint).parse().unwrap();
+
+        // TODO: see if this covers both positive and negative cases right; it does if
+        // negatives are implemented as unary instead of negative bigint literals
+
         // HACK: all ints unsuffixed; could use _i32, _u32 for clarity, or make it as
         // optional
-        rs::LitKind::Int(value as u128, rs::LitIntType::Unsuffixed)
+        rs::LitKind::Int(value, rs::LitIntType::Unsuffixed)
     }
 }
 

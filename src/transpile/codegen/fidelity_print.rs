@@ -337,13 +337,21 @@ impl FidelityPrint for rs::ExprKind {
             }
             rs::ExprKind::Tup(tuple) => format!("({})", into_formatted_list(tuple, ", ", ctx)),
             rs::ExprKind::Binary(op, a, b) => format!(
-                "{a} {op} {b}",
+                // HACK: always add parentheses, because we currently can't trace tokens from
+                // source.
+                // TODO: could try to infer when parentheses are not required by looking at the
+                // subtree for simple cases.
+                "({a} {op} {b})",
                 op = op.fidelity_print(ctx),
                 a = a.fidelity_print(ctx),
                 b = b.fidelity_print(ctx)
             ),
             rs::ExprKind::Unary(op, expr) => format!(
-                "{}{}",
+                // HACK: always add parentheses, because we currently can't trace tokens from
+                // source.
+                // TODO: could try to infer when parentheses are not required by looking at the
+                // subtree for simple cases.
+                "{}({})",
                 op = op.fidelity_print(ctx),
                 expr = expr.fidelity_print(ctx)
             ),
@@ -398,8 +406,20 @@ impl FidelityPrint for rs::ExprKind {
             rs::ExprKind::Assign(_, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::AssignOp(_, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::Field(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Index(_, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Range(_, _, _) => ctx.unimplemented_print(self),
+            rs::ExprKind::Index(path, index) => format!(
+                "{}[{}]",
+                path.fidelity_print(ctx),
+                index.fidelity_print(ctx)
+            ),
+            rs::ExprKind::Range(start, end, _) => {
+                // Unwrap is safe, because all transpiled ranges have a start and an end.
+                // Otherwise they would have been transpiled as Index.
+                format!(
+                    "[{}..{}]",
+                    start.as_ref().unwrap().fidelity_print(ctx),
+                    end.as_ref().unwrap().fidelity_print(ctx)
+                )
+            }
             rs::ExprKind::Path(qself, path) => match qself {
                 Some(_) => ctx.unimplemented_print(self),
                 None => path.fidelity_print(ctx),

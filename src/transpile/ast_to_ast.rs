@@ -89,7 +89,7 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             iter,
             body,
             orelse,
-        } => ctx.unimplemented_item(stmt),
+        } => visit_for(target, iter, body, orelse, ctx),
         py::StatementType::Raise { exception, cause } => {}
         py::StatementType::Try {
             body,
@@ -148,6 +148,35 @@ fn visit_if(
 
     // Emit Rust if-expression
     ctx.emit(if_node);
+}
+
+/// Visits a Python for statement and block to emit a matching transpiled
+/// Rust for-expression.
+fn visit_for(
+    target: &Box<py::Expression>,
+    iter: &Box<py::Expression>,
+    body: &Vec<py::Statement>,
+    orelse: &Option<Vec<py::Statement>>,
+    ctx: &mut AstContext,
+) {
+    if orelse.is_some() {
+        ctx.unimplemented_parameter("for", "orelse", &orelse)
+    }
+
+    // Transpile iter and target
+    let iter = rs::Expr::from_py(iter, ctx);
+    let target = rs::Pat::from_py(target, ctx);
+
+    // Transpile body
+    let body = visit_block(body, ctx);
+
+    // Construct Rust forloop-expression
+    let expr = rs::ExprKind::ForLoop(P(target), P(iter), body, None);
+    let stmt = rs::StmtKind::Expr(P(dummy::expr(expr)));
+    let for_node = rust::NodeKind::Stmt(stmt);
+
+    // Emit Rust forloop-expression
+    ctx.emit(for_node);
 }
 
 /// Visits a Python function definition to emit a transpiled Rust function
