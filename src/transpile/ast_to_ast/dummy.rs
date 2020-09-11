@@ -5,7 +5,7 @@ use rustc_ap_rustc_span::{Span, DUMMY_SP};
 
 /// Constructs a dummy node id using NodeId::MAX
 pub fn node_id() -> node_id::NodeId {
-    node_id::NodeId::MAX
+    unsafe { node_id::NodeId::from_u32_unchecked(0) }
 }
 
 /// Constructs a dummy span using DUMMY_SP
