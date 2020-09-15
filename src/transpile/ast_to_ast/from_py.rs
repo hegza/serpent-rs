@@ -530,3 +530,46 @@ impl FromPy<py::StringGroup> for rs::LitKind {
         rs::LitKind::Str(sym, rs::StrStyle::Cooked)
     }
 }
+
+impl FromPy<py::Expression> for rs::TyKind {
+    fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
+        rs::TyKind::from_py(&expr.node, ctx)
+    }
+}
+
+impl FromPy<py::ExpressionType> for rs::TyKind {
+    fn from_py(expr: &py::ExpressionType, ctx: &mut AstContext) -> Self {
+        if let py::ExpressionType::Identifier { name } = expr {
+            match name.as_ref() {
+                "int" => rs::TyKind::Path(None, util::str_to_path("i64")),
+                // TODO: list out all known Python types
+                _ => {
+                    ctx.unimplemented_parameter("expression type", "name", name);
+                    rs::TyKind::Err
+                }
+            }
+        } else {
+            ctx.unimplemented_parameter("expression type", "expr", expr);
+            rs::TyKind::Err
+        }
+    }
+}
+
+impl FromPy<py::Expression> for rs::FnRetTy {
+    fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
+        rs::FnRetTy::from_py(&expr.node, ctx)
+    }
+}
+
+impl FromPy<py::ExpressionType> for rs::FnRetTy {
+    fn from_py(expr: &py::ExpressionType, ctx: &mut AstContext) -> Self {
+        // Forwards to rs::TyKind
+        let kind = rs::TyKind::from_py(expr, ctx);
+        let ty = rs::Ty {
+            id: dummy::node_id(),
+            kind,
+            span: dummy::span(),
+        };
+        rs::FnRetTy::Ty(P(ty))
+    }
+}

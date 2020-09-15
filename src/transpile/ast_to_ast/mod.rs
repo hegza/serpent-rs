@@ -358,21 +358,11 @@ fn infer_return_type(
         None => {
             // TODO: it may or may not be possible to infer the omitted return
             // type
+            rs::FnRetTy::Default(dummy::span())
         }
         // Some(expr) == explicit return type
-        Some(expr) => ctx.unimplemented_parameter("return_type", "returns", returns),
+        Some(expr) => rs::FnRetTy::from_py(expr, ctx),
     }
-
-    // HACK: set all return types as inferrable, this is probably illegal in Rust
-    // AST
-    let ty = rs::TyKind::Infer;
-    let ty = P(rs::Ty {
-        id: dummy::node_id(),
-        kind: ty,
-        span: dummy::span(),
-    });
-
-    rs::FnRetTy::Ty(ty)
 }
 
 fn create_local(pat: rs::Pat, init: Option<P<rs::Expr>>) -> rs::Local {
@@ -407,16 +397,19 @@ fn create_params_list(args: &Box<py::Parameters>, ctx: &mut AstContext) -> Vec<r
 }
 
 fn create_param(param: &py::Parameter, ctx: &mut AstContext) -> rs::Param {
-    // Report unimplemented AST information
-    if param.annotation.is_some() {
-        ctx.unimplemented_parameter("param", "param.annotation", &param.annotation);
-    }
-
     let pat = P(util::str_to_pat(&param.arg));
 
     // HACK: set all parameter types as inferrable, this is probably illegal in Rust
     // AST
-    let ty = rs::TyKind::Infer;
+
+    let ty = if let Some(ty_annotation) = &param.annotation {
+        // The parameter has a type annotation, use it as the type
+        rs::TyKind::from_py(ty_annotation.as_ref(), ctx)
+    } else {
+        // The parameter has no type annotation, set as `Infer`
+        rs::TyKind::Infer
+    };
+
     let ty = P(rs::Ty {
         id: dummy::node_id(),
         kind: ty,
