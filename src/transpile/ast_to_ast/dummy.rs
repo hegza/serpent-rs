@@ -5,6 +5,8 @@ use rustc_ap_rustc_span::{Span, DUMMY_SP};
 
 /// Constructs a dummy node id using NodeId::MAX
 pub fn node_id() -> node_id::NodeId {
+    // HACK: NodeId::MAX is should be the dummy id, but 0 takes less screen space
+    // for debugging
     unsafe { node_id::NodeId::from_u32_unchecked(0) }
 }
 

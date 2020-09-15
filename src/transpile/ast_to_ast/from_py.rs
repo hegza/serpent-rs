@@ -46,10 +46,11 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 let (a, b) = (&vals[0], &vals[1]);
                 return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx);
             }
-            // An attribute maps to either a rs::ExprKind::MethodCall or a rs::ExprKind::Field, this
-            // can be determined by walking the AST in a late pass
+            // An attribute maps to a field access
             py::ExpressionType::Attribute { value, name } => {
-                return attribute_into_rs(value, name, ctx)
+                let object = rs::Expr::from_py(value, ctx);
+                let field = util::ident(name);
+                return rs::ExprKind::Field(P(object), field);
             }
             py::ExpressionType::Call {
                 function,
@@ -199,31 +200,6 @@ impl FromPy<py::Expression> for rs::Pat {
     }
 }
 
-// An attribute maps to either a rs::ExprKind::MethodCall or a
-// rs::ExprKind::Field, this can be determined by walking the AST in a late pass
-fn attribute_into_rs(
-    value: &Box<py::Expression>,
-    name: &str,
-    ctx: &mut AstContext,
-) -> rs::ExprKind {
-    // HACK: assume all attributes are foreign method accesses
-    //ctx.unimplemented_parameter("attribute", "(value, name)", &(value, name));
-
-    // rs::ExprKind::MethodCall:
-    //
-    // The first element of the vector of an Expr is the expression that evaluates
-    // to the object on which the method is being called on (the receiver), and the
-    // remaining elements are the rest of the arguments.
-    let receiver = rs::Expr::from_py(value, ctx);
-
-    // The PathSegment represents the method name and its generic arguments (within
-    // the angle brackets).
-    let method_name = name;
-    let seg = rs::PathSegment::from_ident(util::ident(method_name));
-
-    rs::ExprKind::MethodCall(seg, vec![P(receiver)], dummy::span())
-}
-
 fn id_to_path(id: &str, ctx: &mut AstContext) -> rs::ExprKind {
     let path = util::str_to_path(id);
 
@@ -309,8 +285,8 @@ fn into_rs_bin_op(
     )
 }
 
-// TODO: could technically be rs::Call or rs::Methodcall, I think; unless all
-// method calls in Python are "Attributes"
+/// Returns an `rs::MethodCall` if the function is an attribute, `rs::Call`
+/// otherwise
 fn into_rs_call(
     function: &Box<py::Expression>,
     args: &[py::Expression],
@@ -321,12 +297,38 @@ fn into_rs_call(
         ctx.unimplemented_parameter("call", "kewords", keywords);
     }
 
-    rs::ExprKind::Call(
-        P(rs::Expr::from_py(function, ctx)),
-        args.iter()
-            .map(|arg| P(rs::Expr::from_py(arg, ctx)))
-            .collect::<Vec<P<rs::Expr>>>(),
-    )
+    // Transpile args
+    let args = args
+        .iter()
+        .map(|arg| P(rs::Expr::from_py(arg, ctx)))
+        .collect();
+
+    // Attribute access in the form of `value.name`
+    if let py::ExpressionType::Attribute { value, name } = &function.node {
+        // The expression is a method call
+
+        // Convert `value` into the method call receiver
+        let receiver = rs::Expr::from_py(value, ctx);
+
+        // Convert `name` into the function path
+        let seg = util::str_to_path_seg(name);
+
+        let rec_and_args = vec![P(receiver)]
+            .into_iter()
+            .chain(args)
+            .collect::<Vec<P<rs::Expr>>>();
+
+        // The first element of the vector of an Expr is the expression that evaluates
+        // to the object on which the method is being called on (the receiver), and the
+        // remaining elements are the rest of the arguments.
+        rs::ExprKind::MethodCall(seg, rec_and_args, dummy::span())
+    } else {
+        // The expression is not a method call
+
+        let function = rs::Expr::from_py(function, ctx);
+
+        rs::ExprKind::Call(P(function), args)
+    }
 }
 
 /// Transpiler extension to the rustc_ast BinOp.

@@ -12,6 +12,10 @@ use std::ops::Deref;
 /// whatever original representation as closely as possible.
 pub(crate) trait FidelityPrint {
     fn fidelity_print(&self, ctx: &mut PrintContext) -> String;
+    // Shorthand for `fidelity_print`
+    fn fp(&self, ctx: &mut PrintContext) -> String {
+        self.fidelity_print(ctx)
+    }
 }
 
 impl FidelityPrint for rs::UseTree {
@@ -312,6 +316,8 @@ impl FidelityPrint for rs::ExprKind {
                         unimplemented!()
                     }
                 };
+                // Omit the receiver from args
+                let args = &args[1..];
 
                 let rs::PathSegment {
                     ident: fn_name,
@@ -405,7 +411,7 @@ impl FidelityPrint for rs::ExprKind {
             rs::ExprKind::TryBlock(_) => ctx.unimplemented_print(self),
             rs::ExprKind::Assign(_, _, _) => ctx.unimplemented_print(self),
             rs::ExprKind::AssignOp(_, _, _) => ctx.unimplemented_print(self),
-            rs::ExprKind::Field(_, _) => ctx.unimplemented_print(self),
+            rs::ExprKind::Field(object, field) => format!("{}.{}", object.fp(ctx), field.fp(ctx)),
             rs::ExprKind::Index(path, index) => format!(
                 "{}[{}]",
                 path.fidelity_print(ctx),

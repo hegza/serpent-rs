@@ -31,11 +31,14 @@ pub fn str_to_pat_kind(from: &str) -> ast::PatKind {
     )
 }
 
+pub fn str_to_path_seg(id: &str) -> ast::PathSegment {
+    ast::PathSegment::from_ident(ident(id))
+}
+
 pub fn str_to_path(id: &str) -> ast::Path {
     let segments = id
         .split('.')
-        .map(ident)
-        .map(ast::PathSegment::from_ident)
+        .map(str_to_path_seg)
         .collect::<Vec<ast::PathSegment>>();
 
     ast::Path {
