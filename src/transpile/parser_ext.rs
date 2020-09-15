@@ -19,10 +19,6 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
             '\n' => {
                 // Newline ends a comment, take it from the option
                 if let Some((location, mut content)) = comment.take() {
-                    // Also add the trailing newline as part of the comment
-                    // EOF comments don't have this
-                    content.push('\n');
-
                     // Then store the comment
                     comments.push(Located {
                         location,
@@ -81,7 +77,7 @@ mod test {
         let correct = vec![
             Located {
                 location: Location::new(1, 1),
-                node: " Test comment\n".to_owned(),
+                node: " Test comment".to_owned(),
             },
             Located {
                 location: Location::new(3, 5),

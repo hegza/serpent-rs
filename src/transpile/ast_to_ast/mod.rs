@@ -1,7 +1,7 @@
 //! TODO: Review all HACKs, FIXMEs
 pub mod dummy;
 mod from_py;
-mod util;
+pub mod util;
 
 use super::context::ImportKind;
 use crate::error::TranspileNodeError;
