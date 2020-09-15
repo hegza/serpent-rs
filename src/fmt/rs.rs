@@ -1,9 +1,6 @@
-use std::fmt::Debug;
-
+use crate::fmt::AstString;
 use crate::transpile::rust;
-use crate::{fmt::AstString, transpile::ast_to_ast::dummy};
 use itertools::Itertools;
-use rustc_ap_rustc_ast::{ast, visit::Visitor};
 
 impl<'a> AstString for &Vec<rust::NodeKind> {
     fn to_ast_string(&self) -> String {

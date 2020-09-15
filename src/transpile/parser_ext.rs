@@ -18,7 +18,7 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
             }
             '\n' => {
                 // Newline ends a comment, take it from the option
-                if let Some((location, mut content)) = comment.take() {
+                if let Some((location, content)) = comment.take() {
                     // Then store the comment
                     comments.push(Located {
                         location,

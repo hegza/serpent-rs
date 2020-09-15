@@ -3,7 +3,6 @@ use super::{
     context::{PrintContext, RustAst},
 };
 use crate::{error::ExpandError, transpile::rust};
-use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ap_rustc_ast_pretty::pprust;
 
 pub(crate) fn ast_to_rust(ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ExpandError> {

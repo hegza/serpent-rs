@@ -1,11 +1,7 @@
 use std::fmt;
 
-use crate::fmt::AstString;
-use crate::transpile::python;
-use itertools::Itertools;
 use py::Located;
 use rustpython_parser::ast as py;
-use rustpython_parser::location::Location;
 
 #[derive(PartialEq)]
 pub struct InvisibleLocation<T>(Located<T>);
