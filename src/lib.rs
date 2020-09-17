@@ -20,6 +20,7 @@
 //!     Ok(())
 //! }
 //! ```
+mod config;
 mod error;
 mod fmt;
 pub mod output;

@@ -1,17 +1,16 @@
 pub mod ast_to_ast;
 mod codegen;
-mod config;
 mod context;
 mod parser_ext;
 pub mod python;
 pub mod rust;
 
+use crate::config::TranspileConfig;
 use crate::{
     error::SerpentError, output::ModPath, output::TranspiledFile, output::TranspiledModule,
     output::TranspiledString, PyModule,
 };
 use ast_to_ast::TranspileNode;
-use config::TranspileConfig;
 use context::{AstContext, ProgramContext};
 use itertools::Itertools;
 use log::info;

@@ -1,7 +1,5 @@
-use super::{
-    config::TranspileConfig,
-    context::{PrintContext, RustAst},
-};
+use super::context::{PrintContext, RustAst};
+use crate::config::TranspileConfig;
 use crate::{error::ExpandError, transpile::rust};
 use rustc_ap_rustc_ast_pretty::pprust;
 

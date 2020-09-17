@@ -3,7 +3,7 @@ use log::warn;
 use rustpython_parser::location::Location;
 use std::fmt::Debug;
 
-pub trait UnimplementedAstNode {
+pub trait HandleUnimplementedAst {
     fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location);
     fn handle_unimplemented_parameter(
         &mut self,
@@ -16,7 +16,7 @@ pub trait UnimplementedAstNode {
 }
 
 /// Handler for missing fidelity print implementations
-pub trait UnimplementedExpand {
+pub trait HandleUnimplementedExpand {
     fn handle_unimplemented(&mut self, item: &dyn Debug);
     fn report(&self) -> Result<(), ExpandError>;
 }
@@ -37,7 +37,7 @@ impl ListUnimplemented {
     }
 }
 
-impl UnimplementedAstNode for ListUnimplemented {
+impl HandleUnimplementedAst for ListUnimplemented {
     fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location) {
         self.items.push(format!("{}: {:?}", location, item));
 
@@ -90,7 +90,7 @@ impl UnimplementedAstNode for ListUnimplemented {
 
 pub struct WarnOnUnimplemented {}
 
-impl UnimplementedAstNode for WarnOnUnimplemented {
+impl HandleUnimplementedAst for WarnOnUnimplemented {
     fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location) {
         warn!("Unimplemented on {}: {:?}", location, item);
     }
@@ -113,7 +113,7 @@ impl UnimplementedAstNode for WarnOnUnimplemented {
     }
 }
 
-impl UnimplementedExpand for WarnOnUnimplemented {
+impl HandleUnimplementedExpand for WarnOnUnimplemented {
     fn handle_unimplemented(&mut self, item: &dyn Debug) {
         warn!("Unimplemented: {:?}", item);
     }
@@ -131,7 +131,7 @@ impl ListUnimplementedExpand {
     }
 }
 
-impl UnimplementedExpand for ListUnimplementedExpand {
+impl HandleUnimplementedExpand for ListUnimplementedExpand {
     fn handle_unimplemented(&mut self, item: &dyn Debug) {
         self.0.push(format!("{:?}", item));
     }
@@ -154,7 +154,7 @@ impl UnimplementedExpand for ListUnimplementedExpand {
 
 pub struct AlwaysPanic {}
 
-impl UnimplementedExpand for AlwaysPanic {
+impl HandleUnimplementedExpand for AlwaysPanic {
     fn handle_unimplemented(&mut self, item: &dyn Debug) {
         panic!("Unimplemented: {:?}", item);
     }
@@ -166,7 +166,7 @@ impl UnimplementedExpand for AlwaysPanic {
     }
 }
 
-impl UnimplementedAstNode for AlwaysPanic {
+impl HandleUnimplementedAst for AlwaysPanic {
     fn handle_unimplemented_item(&mut self, item: &dyn Debug, location: &Location) {
         panic!("Unimplemented on {}: {:?}", location, item);
     }

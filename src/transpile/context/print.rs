@@ -1,10 +1,11 @@
-use super::handler;
-use crate::{error::ExpandError, transpile::config::TranspileConfig};
+use super::error_strategy::*;
+use crate::config::TranspileConfig;
+use crate::error::ExpandError;
 
 pub(crate) struct PrintContext {
     /// Number of nodes transpiled thus far
     idx: usize,
-    unimplemented_handler: Box<dyn handler::UnimplementedExpand>,
+    unimplemented_handler: Box<dyn HandleUnimplementedExpand>,
     /// Produced Rust source code
     target: String,
     depth: usize,
@@ -12,15 +13,14 @@ pub(crate) struct PrintContext {
 
 impl PrintContext {
     pub fn new(cfg: &TranspileConfig) -> PrintContext {
-        use crate::transpile::config::MissingImplBehavior;
-        let unimplemented_handler: Box<dyn handler::UnimplementedExpand> = match cfg.on_missing_impl
-        {
-            MissingImplBehavior::EmitDummy => Box::new(handler::WarnOnUnimplemented {}),
-            MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
+        use crate::config::MissingImplBehavior;
+        let unimplemented_handler: Box<dyn HandleUnimplementedExpand> = match cfg.on_missing_impl {
+            MissingImplBehavior::EmitDummy => Box::new(WarnOnUnimplemented {}),
+            MissingImplBehavior::Omit => Box::new(WarnOnUnimplemented {}),
             MissingImplBehavior::ErrorAtAst | MissingImplBehavior::ErrorAtCodegen => {
-                Box::new(handler::ListUnimplementedExpand::new())
+                Box::new(ListUnimplementedExpand::new())
             }
-            MissingImplBehavior::PanicImmediately => Box::new(handler::AlwaysPanic {}),
+            MissingImplBehavior::PanicImmediately => Box::new(AlwaysPanic {}),
         };
 
         PrintContext {

@@ -1,11 +1,12 @@
-mod handler;
+mod error_strategy;
 mod print;
 
 pub(crate) use print::PrintContext;
 
-use super::ast_to_ast::dummy;
-use super::{config::TranspileConfig, python};
+use super::{ast_to_ast::dummy, python};
+use crate::config::TranspileConfig;
 use crate::{error::TranspileNodeError, transpile::rust, PyModule};
+use error_strategy::*;
 use log::trace;
 use python::Node;
 use rustc_ap_rustc_ast::ast as rs;
@@ -47,7 +48,7 @@ pub(crate) struct AstContext<'py_ast> {
     node_idx: usize,
     // Other local module symbols relative to the source module of this AST
     relative_mod_symbols: &'py_ast [String],
-    unimplemented_handler: Box<dyn handler::UnimplementedAstNode>,
+    unimplemented_handler: Box<dyn HandleUnimplementedAst>,
     emit_placeholders: bool,
     // `depth` and `block` help implement recursing into blocks
     depth: usize,
@@ -65,18 +66,16 @@ impl<'py_ast> AstContext<'py_ast> {
     ) -> AstContext<'py_ast> {
         let mut emit_placeholders = false;
 
-        use super::config::MissingImplBehavior;
-        let unimplemented_handler: Box<dyn handler::UnimplementedAstNode> = match cfg
-            .on_missing_impl
-        {
+        use crate::config::MissingImplBehavior;
+        let unimplemented_handler: Box<dyn HandleUnimplementedAst> = match cfg.on_missing_impl {
             MissingImplBehavior::EmitDummy => {
                 emit_placeholders = true;
-                Box::new(handler::WarnOnUnimplemented {})
+                Box::new(WarnOnUnimplemented {})
             }
-            MissingImplBehavior::Omit => Box::new(handler::WarnOnUnimplemented {}),
-            MissingImplBehavior::ErrorAtAst => Box::new(handler::ListUnimplemented::new(false)),
-            MissingImplBehavior::ErrorAtCodegen => Box::new(handler::ListUnimplemented::new(true)),
-            MissingImplBehavior::PanicImmediately => Box::new(handler::AlwaysPanic {}),
+            MissingImplBehavior::Omit => Box::new(WarnOnUnimplemented {}),
+            MissingImplBehavior::ErrorAtAst => Box::new(ListUnimplemented::new(false)),
+            MissingImplBehavior::ErrorAtCodegen => Box::new(ListUnimplemented::new(true)),
+            MissingImplBehavior::PanicImmediately => Box::new(AlwaysPanic {}),
         };
 
         AstContext {
