@@ -1,7 +1,9 @@
-use std::fmt;
-
+use super::OpaqueDebug;
+use crate::transpile::python;
 use py::Located;
 use rustpython_parser::ast as py;
+
+use std::fmt;
 
 #[derive(PartialEq)]
 pub struct InvisibleLocation<T>(Located<T>);
@@ -26,5 +28,15 @@ impl<T> std::ops::Deref for InvisibleLocation<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl OpaqueDebug for python::NodeKind {
+    fn opaque_fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            python::NodeKind::Statement(stmt) => write!(f, "Statement({})", stmt.location),
+            python::NodeKind::Newline(loc) => write!(f, "Newline({})", loc),
+            python::NodeKind::Comment(content) => write!(f, "Comment({:?})", content),
+        }
     }
 }
