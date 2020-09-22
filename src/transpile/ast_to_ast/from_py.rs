@@ -20,7 +20,7 @@ pub(crate) trait FromPy<T>: Sized {
 impl FromPy<py::Expression> for rs::ExprKind {
     fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
         match &expr.node {
-            py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_item(expr),
+            py::ExpressionType::BoolOp { op: _, values: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Binop { a, op, b } => {
                 return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
             }
@@ -34,9 +34,9 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::Unop { op, a } => {
                 return into_rs_un_op(UnOp::from_py(op, ctx), a, ctx)
             }
-            py::ExpressionType::Await { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Yield { value } => ctx.unimplemented_item(expr),
-            py::ExpressionType::YieldFrom { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Await { value: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Yield { value: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::YieldFrom { value: _ } => ctx.unimplemented_item(expr),
             // A Python chained comparison, eg. `a < b` or `a < b < c`
             // TODO: `a < b && b < c`
             py::ExpressionType::Compare { vals, ops } => {
@@ -74,10 +74,10 @@ impl FromPy<py::Expression> for rs::ExprKind {
                         .collect::<Vec<P<rs::Expr>>>(),
                 )
             }
-            py::ExpressionType::Dict { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Set { elements } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Starred { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Dict { elements: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Set { elements: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Comprehension { kind: _, generators: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Starred { value: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Slice { elements } => {
                 if elements[2].node != py::ExpressionType::None {
                     unimplemented!("step argument in slice is not supported: {:?}", expr);
@@ -96,12 +96,12 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::String { value } => {
                 return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
             }
-            py::ExpressionType::Bytes { value } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Bytes { value: _ } => ctx.unimplemented_item(expr),
             // An identifier in an expression is probably a rs::Path
             py::ExpressionType::Identifier { name } => return id_to_path(name, ctx),
-            py::ExpressionType::Lambda { args, body } => ctx.unimplemented_item(expr),
-            py::ExpressionType::IfExpression { test, body, orelse } => ctx.unimplemented_item(expr),
-            py::ExpressionType::NamedExpression { left, right } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Lambda { args: _, body: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::IfExpression { test: _, body: _, orelse: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::NamedExpression { left: _, right: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::True => ctx.unimplemented_item(expr),
             py::ExpressionType::False => ctx.unimplemented_item(expr),
             py::ExpressionType::None => ctx.unimplemented_item(expr),
@@ -153,36 +153,36 @@ fn into_rs_vec_macro(elements: &[py::Expression], ctx: &mut AstContext) -> rs::M
 impl FromPy<py::Expression> for rs::PatKind {
     fn from_py(expr: &py::Expression, ctx: &mut AstContext) -> Self {
         match &expr.node {
-            py::ExpressionType::BoolOp { op, values } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Binop { a, op, b } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::BoolOp { op: _, values: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Binop { a: _, op: _, b: _ } => ctx.unimplemented_pat(expr),
             // A subscript as a pattern does not exist in Rust; this requires another solution
-            py::ExpressionType::Subscript { a, b } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Unop { op, a } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Await { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Yield { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::YieldFrom { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Compare { vals, ops } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Attribute { value, name } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Subscript { a: _, b: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Unop { op: _, a: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Await { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Yield { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::YieldFrom { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Compare { vals: _, ops: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Attribute { value: _, name: _ } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Call {
-                function,
-                args,
-                keywords,
+                function: _,
+                args: _,
+                keywords: _,
             } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Number { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::List { elements } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Number { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::List { elements: _ } => ctx.unimplemented_pat(expr),
             // Assignment to tuple in Python becomes an assignment to tuple in Rust
             py::ExpressionType::Tuple { elements } => rs::PatKind::Tuple(elements.iter().map(|e| rs::Pat::from_py(e, ctx)).map(P).collect::<Vec<P<rs::Pat>>>()),
-            py::ExpressionType::Dict { elements } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Set { elements } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Comprehension { kind, generators } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Starred { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Slice { elements } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::String { value } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::Bytes { value } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Dict { elements: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Set { elements: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Comprehension { kind: _, generators: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Starred { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Slice { elements: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::String { value: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Bytes { value: _ } => ctx.unimplemented_pat(expr),
             py::ExpressionType::Identifier { name } => util::str_to_pat_kind( name ),
-            py::ExpressionType::Lambda { args, body } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::IfExpression { test, body, orelse } => ctx.unimplemented_pat(expr),
-            py::ExpressionType::NamedExpression { left, right } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::Lambda { args: _, body: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::IfExpression { test: _, body: _, orelse: _ } => ctx.unimplemented_pat(expr),
+            py::ExpressionType::NamedExpression { left: _, right: _ } => ctx.unimplemented_pat(expr),
             // The following Python expressions can not be Rust patterns
             py::ExpressionType::True | py::ExpressionType::False | py::ExpressionType::None | py::ExpressionType::Ellipsis => panic!(
                 "{:?} cannot be made into a Rust pattern, it's also likely invalid Python code unless transpiler implementation has a mistake"
@@ -201,7 +201,7 @@ impl FromPy<py::Expression> for rs::Pat {
     }
 }
 
-fn id_to_path(id: &str, ctx: &mut AstContext) -> rs::ExprKind {
+fn id_to_path(id: &str, _ctx: &mut AstContext) -> rs::ExprKind {
     let path = util::str_to_path(id);
 
     // FIXME: Paths are never qualified (first arg = None)
@@ -352,7 +352,7 @@ enum UnOp {
 }
 
 impl FromPy<py::UnaryOperator> for UnOp {
-    fn from_py(op: &py::UnaryOperator, ctx: &mut AstContext) -> Self {
+    fn from_py(op: &py::UnaryOperator, _ctx: &mut AstContext) -> Self {
         match op {
             py::UnaryOperator::Pos => UnOp::Identity,
             py::UnaryOperator::Neg => UnOp::Ast(rs::UnOp::Neg),
@@ -477,7 +477,7 @@ impl FromPy<py::Number> for rs::LitKind {
         match number {
             py::Number::Integer { value } => rs::LitKind::from_py(value, ctx),
             py::Number::Float { value } => rs::LitKind::from_py(value, ctx),
-            py::Number::Complex { real, imag } => {
+            py::Number::Complex { real: _, imag: _ } => {
                 ctx.unimplemented_parameter("number", "complex", number);
                 rs::LitKind::Err(util::symbol(&format!("{:?}", number)))
             }
@@ -487,7 +487,7 @@ impl FromPy<py::Number> for rs::LitKind {
 
 /// Converts a Pythonic float into a Rust float
 impl FromPy<f64> for rs::LitKind {
-    fn from_py(f: &f64, ctx: &mut AstContext) -> Self {
+    fn from_py(f: &f64, _ctx: &mut AstContext) -> Self {
         let s = format!("{}", f);
         let sym = util::symbol(&s);
         // HACK: all floats unsuffixed; could use _f32, _f64 for clarity, or make it as
@@ -497,7 +497,7 @@ impl FromPy<f64> for rs::LitKind {
 }
 
 impl FromPy<num_bigint::BigInt> for rs::LitKind {
-    fn from_py(bigint: &num_bigint::BigInt, ctx: &mut AstContext) -> Self {
+    fn from_py(bigint: &num_bigint::BigInt, _ctx: &mut AstContext) -> Self {
         // HACK: workaround bigints via string conversion
         let value: u128 = format!("{}", bigint).parse().unwrap();
 
@@ -515,9 +515,9 @@ impl FromPy<py::StringGroup> for rs::LitKind {
         let s = match sg {
             py::StringGroup::Constant { value } => value,
             py::StringGroup::FormattedValue {
-                value,
-                conversion,
-                spec,
+                value: _,
+                conversion: _,
+                spec: _,
             } => {
                 ctx.unimplemented_parameter("StringGroup", "sg", sg);
                 "()"

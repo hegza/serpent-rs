@@ -63,46 +63,46 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             names,
         } => visit_import_from(level, module, names, ctx),
         py::StatementType::Pass => ctx.unimplemented_item(stmt),
-        py::StatementType::Assert { test, msg } => ctx.unimplemented_item(stmt),
-        py::StatementType::Delete { targets } => ctx.unimplemented_item(stmt),
+        py::StatementType::Assert { test: _, msg: _ } => ctx.unimplemented_item(stmt),
+        py::StatementType::Delete { targets: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::Assign { targets, value } => visit_assign(targets, value, ctx),
-        py::StatementType::AugAssign { target, op, value } => ctx.unimplemented_item(stmt),
+        py::StatementType::AugAssign { target: _, op: _, value: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::AnnAssign {
-            target,
-            annotation,
-            value,
+            target: _,
+            annotation: _,
+            value: _,
         } => ctx.unimplemented_item(stmt),
         // TODO: py::StatementType::Expression { expression } => visit_expression(expression, ctx),
         py::StatementType::Expression { expression } => visit_expression(expression, ctx),
-        py::StatementType::Global { names } => ctx.unimplemented_item(stmt),
-        py::StatementType::Nonlocal { names } => ctx.unimplemented_item(stmt),
+        py::StatementType::Global { names: _ } => ctx.unimplemented_item(stmt),
+        py::StatementType::Nonlocal { names: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::If { test, body, orelse } => visit_if(test, body, orelse, ctx),
-        py::StatementType::While { test, body, orelse } => ctx.unimplemented_item(stmt),
+        py::StatementType::While { test: _, body: _, orelse: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::With {
-            is_async,
-            items,
-            body,
+            is_async: _,
+            items: _,
+            body: _,
         } => ctx.unimplemented_item(stmt),
         py::StatementType::For {
-            is_async,
+            is_async: _,
             target,
             iter,
             body,
             orelse,
         } => visit_for(target, iter, body, orelse, ctx),
-        py::StatementType::Raise { exception, cause } => {}
+        py::StatementType::Raise { exception: _, cause: _ } => {}
         py::StatementType::Try {
-            body,
-            handlers,
-            orelse,
-            finalbody,
+            body: _,
+            handlers: _,
+            orelse: _,
+            finalbody: _,
         } => ctx.unimplemented_item(stmt),
         py::StatementType::ClassDef {
-            name,
-            body,
-            bases,
-            keywords,
-            decorator_list,
+            name: _,
+            body: _,
+            bases: _,
+            keywords: _,
+            decorator_list: _,
         } => ctx.unimplemented_item(stmt),
         py::StatementType::FunctionDef {
             is_async,
@@ -346,8 +346,8 @@ fn visit_assign(targets: &[py::Expression], value: &py::Expression, ctx: &mut As
 
 /// Reads a function definition and its block to determine a return type
 fn infer_return_type(
-    args: &Box<py::Parameters>,
-    body: &py::Suite,
+    _args: &Box<py::Parameters>,
+    _body: &py::Suite,
     returns: &Option<py::Expression>,
     ctx: &mut AstContext,
 ) -> rs::FnRetTy {
@@ -379,13 +379,13 @@ fn create_local(pat: rs::Pat, init: Option<P<rs::Expr>>) -> rs::Local {
 
 fn create_params_list(args: &Box<py::Parameters>, ctx: &mut AstContext) -> Vec<rs::Param> {
     let py::Parameters {
-        posonlyargs_count,
+        posonlyargs_count: _,
         args,
-        kwonlyargs,
-        vararg,
-        kwarg,
-        defaults,
-        kw_defaults,
+        kwonlyargs: _,
+        vararg: _,
+        kwarg: _,
+        defaults: _,
+        kw_defaults: _,
     } = &**args;
 
     let mut list = Vec::with_capacity(args.len());

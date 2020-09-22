@@ -27,7 +27,7 @@ use std::{fs, path};
 ///
 /// * `infer_main` - Whether to create a runnable main function from
 ///   free-standing Python code.
-pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspiledString, SerpentError> {
+pub fn transpile_str(src: &str, _infer_main: bool) -> Result<TranspiledString, SerpentError> {
     let py_nodes = parse_str_to_py_ast(&src)?;
     let cfg = TranspileConfig::default();
 
