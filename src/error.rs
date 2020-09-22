@@ -31,7 +31,7 @@ use thiserror::Error as ThisError;
 
 /// An error that occurred due to a top-level API call.
 #[derive(ThisError, Debug)]
-pub enum SerpentError {
+pub enum ApiError {
     /// An I/O error that occurred while reading a Python source file. All IO
     /// errors are from Python files, as long as we only parse Python files.
     /// This may change one day.
@@ -73,15 +73,15 @@ pub struct TranspileError {
     pub source: TranspileNodeError,
 }
 
-impl SerpentError {
+impl ApiError {
     /// Return the location for this error, if one exists.
     ///
     /// This is a convenience function that permits callers to easily access
     /// the location on an error without doing case analysis on `SerpentError`.
     pub fn location(&self) -> Option<&Location> {
         match *self {
-            SerpentError::Parse(ref err) => Some(&err.location),
-            SerpentError::Transpile(ref err) => Some(&err.location),
+            ApiError::Parse(ref err) => Some(&err.location),
+            ApiError::Transpile(ref err) => Some(&err.location),
             _ => None,
         }
     }
@@ -92,7 +92,7 @@ impl SerpentError {
     /// `SerpentError::Io`.
     pub fn is_io_error(&self) -> bool {
         match *self {
-            SerpentError::Io(_) => true,
+            ApiError::Io(_) => true,
             _ => false,
         }
     }

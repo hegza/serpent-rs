@@ -52,10 +52,10 @@ impl<'ast> Visitor<'ast> for AstStringGenerator {
 impl OpaqueDebug for rust::NodeKind {
     fn opaque_fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            rust::NodeKind::Item(item) => write!(f, "Item"),
-            rust::NodeKind::ExtendedItem(item) => write!(f, "ExtendedItem"),
-            rust::NodeKind::Stmt(stmt) => write!(f, "Stmt"),
-            rust::NodeKind::ExtendedStmt(stmt) => write!(f, "ExtendedStmt"),
+            rust::NodeKind::Item(_item) => write!(f, "Item"),
+            rust::NodeKind::ExtendedItem(_item) => write!(f, "ExtendedItem"),
+            rust::NodeKind::Stmt(_stmt) => write!(f, "Stmt"),
+            rust::NodeKind::ExtendedStmt(_stmt) => write!(f, "ExtendedStmt"),
             rust::NodeKind::Newline => write!(f, "Newline"),
             rust::NodeKind::Comment(content) => write!(f, "Comment({})", content),
         }

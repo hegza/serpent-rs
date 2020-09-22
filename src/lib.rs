@@ -20,14 +20,21 @@
 //!     Ok(())
 //! }
 //! ```
+mod builder;
 mod config;
 mod error;
 mod fmt;
 pub mod output;
 mod py_module;
+#[cfg(test)]
+mod tests;
 mod transpile;
 
-pub use crate::error::{SerpentError, TranspileError};
+pub use crate::builder::{
+    Transpile, TranspileFileBuilder, TranspileModuleBuilder, TranspileStringBuilder,
+};
+pub use crate::config::TranspileConfig;
+pub use crate::error::ApiError;
 pub use crate::output::{ModPath, TranspiledFile, TranspiledModule, TranspiledString};
 pub use crate::py_module::{ImportError, PyModule};
 
@@ -38,7 +45,7 @@ use transpile::transpile_module_dir;
 
 /// A type alias for `Result<T, serpent::SerpentError>`. All API functions
 /// return a SerpentError.
-pub type Result<T> = std::result::Result<T, SerpentError>;
+pub type Result<T> = std::result::Result<T, ApiError>;
 
 /// Enum for different kinds of Python programs: runnables and libraries.
 #[derive(PartialEq, Clone)]
@@ -70,8 +77,8 @@ pub enum ProgramKind {
 /// #    Ok(result)
 /// # }
 /// ```
-pub fn transpile_str(src: &str, infer_main: bool) -> Result<TranspiledString> {
-    transpile::transpile_str(src, infer_main)
+pub fn transpile_str(src: &str) -> Result<TranspiledString> {
+    transpile::transpile_str(src, &crate::config::TranspileConfig::default())
 }
 
 /// Transpiles a Python module from given directory to Rust.
@@ -98,7 +105,7 @@ pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledFil
     with_default_session_globals(|| {
         let path = file_path.as_ref();
         let content = fs::read_to_string(path)?;
-        let transpiled = transpile_str(&content, false)?;
+        let transpiled = transpile_str(&content)?;
         Ok(TranspiledFile(path.to_path_buf(), transpiled))
     })
 }
@@ -111,8 +118,8 @@ pub fn transpile_standalone_line_in_file(
     let path = file_path.as_ref();
     let content = fs::read_to_string(path)?;
     match content.lines().nth(line as usize) {
-        Some(line_content) => transpile_str(line_content, false),
-        None => Err(SerpentError::LineParameter {
+        Some(line_content) => transpile_str(line_content),
+        None => Err(ApiError::LineParameter {
             requested: line,
             file: path.to_str().unwrap().to_owned(),
             actual_line_count: content.lines().count(),

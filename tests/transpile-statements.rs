@@ -1,4 +1,4 @@
-use serpent::transpile_str;
+use serpent::{Transpile, TranspileConfig, TranspileStringBuilder};
 use test_case::test_case;
 
 #[test_case(
@@ -15,5 +15,12 @@ use test_case::test_case;
     include_str!("input/simple_multiline.rs");
     "simple multiline transpiles right")]
 fn transpile_runnable(stmt: &str) -> String {
-    transpile_str(stmt, true).unwrap().into_string()
+    TranspileStringBuilder::new(stmt.to_owned())
+        .config(TranspileConfig {
+            infer_main: true,
+            ..Default::default()
+        })
+        .transpile()
+        .unwrap()
+        .into_string()
 }

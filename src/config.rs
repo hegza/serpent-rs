@@ -4,6 +4,7 @@ pub struct TranspileConfig {
     /// What to do when an unimplemented AST-to-AST translation item is
     /// encountered.
     pub on_missing_impl: MissingImplBehavior,
+    pub infer_main: bool,
 }
 
 /// Describes behavior for what should happen when an unimplemented AST-to-AST
@@ -28,7 +29,8 @@ pub enum MissingImplBehavior {
 impl Default for TranspileConfig {
     fn default() -> Self {
         TranspileConfig {
-            on_missing_impl: MissingImplBehavior::ErrorAtAst,
+            on_missing_impl: MissingImplBehavior::Omit,
+            infer_main: false,
         }
     }
 }

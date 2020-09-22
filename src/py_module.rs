@@ -1,11 +1,11 @@
 use std::{collections::HashMap, ffi, fs, io, path, result};
 
-use crate::SerpentError;
+use crate::ApiError;
 use log::{info, trace, warn};
 use thiserror::Error as ThisError;
 
 /// A type alias for `Result<T, serpent::SerpentError>`.
-pub type Result<T> = result::Result<T, SerpentError>;
+pub type Result<T> = result::Result<T, ApiError>;
 
 /// A buffer for messages concerning module import outcomes. Can be used to
 /// either inform the user about what has been transpiled, or the transpiler
