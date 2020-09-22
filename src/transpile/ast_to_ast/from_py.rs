@@ -261,9 +261,9 @@ fn to_rs_bin_op(
     let b = P(rs::Expr::from_py(b, ctx));
 
     let op = match kind {
-        BinOp::Ast(op) => op,
+        BinOp::Native(op) => op,
         BinOp::Method(method) => match method {
-            BinMethod::Powi => {
+            StdMethod::Powi => {
                 // HACK: just throwing in a `std::f64::powi` here without thinking about it too
                 // much
                 let kind = id_to_path("f64::powi", ctx);
@@ -341,16 +341,18 @@ fn to_rs_call(
     }
 }
 
-/// Transpiler extension to the rustc_ast BinOp.
-pub(crate) enum BinOp {
-    /// Existing rustc_ast BinOp
-    Ast(rs::BinOpKind),
-    /// A method call
-    Method(BinMethod),
+/// Represents a binary operation in Rust. Extends rs::BinOp.
+enum BinOp {
+    /// A native rs::BinOp represented by a symbol, eg. '>'.
+    Native(rs::BinOpKind),
+    /// A call to a method with the receiver being left-hand operand, and the
+    /// parameter being... the parameter.
+    Method(StdMethod),
     Unimplemented,
 }
 
-pub(crate) enum BinMethod {
+enum StdMethod {
+    /// Represents `{}::powi(a, b)`.
     Powi,
 }
 
@@ -374,9 +376,9 @@ impl FromPy<py::UnaryOperator> for UnOp {
 impl FromPy<py::Operator> for BinOp {
     fn from_py(op: &py::Operator, ctx: &mut AstContext) -> Self {
         match op {
-            py::Operator::Add => BinOp::Ast(rs::BinOpKind::Add),
-            py::Operator::Sub => BinOp::Ast(rs::BinOpKind::Sub),
-            py::Operator::Mult => BinOp::Ast(rs::BinOpKind::Mul),
+            py::Operator::Add => BinOp::Native(rs::BinOpKind::Add),
+            py::Operator::Sub => BinOp::Native(rs::BinOpKind::Sub),
+            py::Operator::Mult => BinOp::Native(rs::BinOpKind::Mul),
             // TODO: the transpiled probably needs a way to tag this and forward it to the
             // transpiled output This is definitely something that could be "user
             // transpilable"
@@ -387,27 +389,27 @@ impl FromPy<py::Operator> for BinOp {
             // TODO: Python 3 automatically uses floats for division, Rust should do that here too
             py::Operator::Div => {
                 warn!("py::Div transpiled as rs::Div, this behaves incorrectly for integral arguments");
-                BinOp::Ast(rs::BinOpKind::Div)
+                BinOp::Native(rs::BinOpKind::Div)
             }
-            py::Operator::Mod => BinOp::Ast(rs::BinOpKind::Rem),
+            py::Operator::Mod => BinOp::Native(rs::BinOpKind::Rem),
             // TODO: pow can be implemented using the standard library
             py::Operator::Pow => {
                 // TODO: determine types and choose implementation based on runtime
                 warn!("py::Pow transpiled as rs::powi, this only covers integral cases");
-                BinOp::Method(BinMethod::Powi)
+                BinOp::Method(StdMethod::Powi)
             }
-            py::Operator::LShift => BinOp::Ast(rs::BinOpKind::Shl),
-            py::Operator::RShift => BinOp::Ast(rs::BinOpKind::Shr),
-            py::Operator::BitOr => BinOp::Ast(rs::BinOpKind::BitOr),
-            py::Operator::BitXor => BinOp::Ast(rs::BinOpKind::BitXor),
-            py::Operator::BitAnd => BinOp::Ast(rs::BinOpKind::BitAnd),
+            py::Operator::LShift => BinOp::Native(rs::BinOpKind::Shl),
+            py::Operator::RShift => BinOp::Native(rs::BinOpKind::Shr),
+            py::Operator::BitOr => BinOp::Native(rs::BinOpKind::BitOr),
+            py::Operator::BitXor => BinOp::Native(rs::BinOpKind::BitXor),
+            py::Operator::BitAnd => BinOp::Native(rs::BinOpKind::BitAnd),
             // TODO: Python floor div is different from Rust integer division, this implementation
             // behaves incorrectly for some values
             py::Operator::FloorDiv => {
                 warn!(
                     "py::FloorDiv transpiled as rs::Div, this behaves incorrectly for some values"
                 );
-                BinOp::Ast(rs::BinOpKind::Div)
+                BinOp::Native(rs::BinOpKind::Div)
             }
         }
     }
@@ -421,19 +423,19 @@ impl FromPy<py::Comparison> for BinOp {
             // object or not.
             py::Comparison::Equal | py::Comparison::Is => {
                 warn!("serpent does not differentiate between Python `==` and `is`");
-                BinOp::Ast(rs::BinOpKind::Eq)
+                BinOp::Native(rs::BinOpKind::Eq)
             }
             // TODO: The != operator compares the values of both the operands and checks for value
             // inequality. Whereas `is not` operator checks whether both the operands refer to the
             // same object or not.
             py::Comparison::NotEqual | py::Comparison::IsNot => {
                 warn!("serpent does not differentiate between Python `!=` and `is not`");
-                BinOp::Ast(rs::BinOpKind::Ne)
+                BinOp::Native(rs::BinOpKind::Ne)
             }
-            py::Comparison::Less => BinOp::Ast(rs::BinOpKind::Lt),
-            py::Comparison::LessOrEqual => BinOp::Ast(rs::BinOpKind::Le),
-            py::Comparison::Greater => BinOp::Ast(rs::BinOpKind::Gt),
-            py::Comparison::GreaterOrEqual => BinOp::Ast(rs::BinOpKind::Ge),
+            py::Comparison::Less => BinOp::Native(rs::BinOpKind::Lt),
+            py::Comparison::LessOrEqual => BinOp::Native(rs::BinOpKind::Le),
+            py::Comparison::Greater => BinOp::Native(rs::BinOpKind::Gt),
+            py::Comparison::GreaterOrEqual => BinOp::Native(rs::BinOpKind::Ge),
             py::Comparison::In => {
                 ctx.unimplemented_parameter("comparison", "comp", comp);
                 BinOp::Unimplemented
