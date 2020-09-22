@@ -1,5 +1,5 @@
 /// Changes the behavior of the transpiler.
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct TranspileConfig {
     /// What to do when an unimplemented AST-to-AST translation item is
     /// encountered.
@@ -8,7 +8,7 @@ pub struct TranspileConfig {
 
 /// Describes behavior for what should happen when an unimplemented AST-to-AST
 /// translation item is encountered.
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum MissingImplBehavior {
     /// Emit a placeholder based on original source that the user can correct
     EmitDummy,

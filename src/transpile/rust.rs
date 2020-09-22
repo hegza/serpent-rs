@@ -1,7 +1,7 @@
 use rustc_ap_rustc_ast::ast::{Item, ItemKind, Stmt, StmtKind};
 
 /// An item, a statement, a newline or a comment of Rust.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum NodeKind {
     /// An anonymous Rust AST item matching with rustc_ast::ItemKind.
     Item(ItemKind),

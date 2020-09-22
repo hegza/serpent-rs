@@ -21,6 +21,7 @@ pub trait HandleUnimplementedExpand {
     fn report(&self) -> Result<(), ExpandError>;
 }
 
+#[derive(PartialEq)]
 pub struct ListUnimplemented {
     items: Vec<String>,
     first: Option<Location>,
@@ -88,6 +89,7 @@ impl HandleUnimplementedAst for ListUnimplemented {
     }
 }
 
+#[derive(PartialEq)]
 pub struct WarnOnUnimplemented {}
 
 impl HandleUnimplementedAst for WarnOnUnimplemented {
@@ -123,6 +125,7 @@ impl HandleUnimplementedExpand for WarnOnUnimplemented {
     }
 }
 
+#[derive(PartialEq)]
 pub struct ListUnimplementedExpand(Vec<String>);
 
 impl ListUnimplementedExpand {
@@ -152,6 +155,7 @@ impl HandleUnimplementedExpand for ListUnimplementedExpand {
     }
 }
 
+#[derive(PartialEq)]
 pub struct AlwaysPanic {}
 
 impl HandleUnimplementedExpand for AlwaysPanic {

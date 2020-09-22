@@ -65,7 +65,7 @@ pub enum SerpentError {
     __Nonexhaustive,
 }
 
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub struct TranspileError {
     pub location: Location,
     pub filename: Option<String>,
@@ -122,7 +122,7 @@ impl fmt::Display for TranspileError {
 }
 
 /// An error that occurred while transpiling a Python AST node into Rust.
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum TranspileNodeError {
     /// Transform for this Python AST node was not implemented.
     Unimplemented {
@@ -182,7 +182,7 @@ impl fmt::Display for TranspileNodeError {
     }
 }
 
-#[derive(ThisError, Debug)]
+#[derive(ThisError, Debug, Clone)]
 pub enum ExpandError {
     /// Fidelity print is not implemented for this item
     #[error("no implementation for node: {0}")]

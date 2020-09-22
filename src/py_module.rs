@@ -15,7 +15,7 @@ pub type Result<T> = result::Result<T, SerpentError>;
 type MessageBuffer = ();
 
 /// Represents a Python module or a package loaded from a directory or a file.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PyModule {
     /// A map of files by module symbol, for tracking Python imports and
     /// possible error backtrace.
