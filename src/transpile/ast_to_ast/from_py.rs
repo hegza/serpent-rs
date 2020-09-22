@@ -266,7 +266,7 @@ fn to_rs_bin_op(
             BinMethod::Powi => {
                 // HACK: just throwing in a `std::f64::powi` here without thinking about it too
                 // much
-                let kind = id_to_path("std::f64::powi", ctx);
+                let kind = id_to_path("f64::powi", ctx);
                 let func = rs::Expr {
                     id: dummy::node_id(),
                     kind,
