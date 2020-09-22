@@ -38,6 +38,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
             py::ExpressionType::Yield { value } => ctx.unimplemented_item(expr),
             py::ExpressionType::YieldFrom { value } => ctx.unimplemented_item(expr),
             // A Python chained comparison, eg. `a < b` or `a < b < c`
+            // TODO: `a < b && b < c`
             py::ExpressionType::Compare { vals, ops } => {
                 if vals.len() != 2 || ops.len() != 1 {
                     ctx.unimplemented_parameter("chained_comparison", "(vals, ops)", &(vals, ops));
