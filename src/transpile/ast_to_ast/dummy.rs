@@ -1,5 +1,6 @@
+//! Methods that add placeholder data to complete the requested type.
 use rustc_ap_rustc_ast::ast;
-use rustc_ap_rustc_ast::{node_id, token};
+use rustc_ap_rustc_ast::node_id;
 use rustc_ap_rustc_data_structures::thin_vec::ThinVec;
 use rustc_ap_rustc_span::{symbol, Span, DUMMY_SP};
 
@@ -17,10 +18,6 @@ pub fn span() -> Span {
 
 pub fn attr_vec() -> ast::AttrVec {
     ThinVec::new()
-}
-
-pub fn token(kind: ast::LitKind) -> token::Lit {
-    kind.to_lit_token()
 }
 
 pub fn expr(kind: ast::ExprKind) -> ast::Expr {

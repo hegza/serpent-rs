@@ -160,14 +160,14 @@ fn collect_python_in_dir(dir: impl AsRef<path::Path>) -> Result<Vec<fs::DirEntry
     Ok(py_files)
 }
 
-fn get_extension_from_filename(filename: &str) -> Option<&str> {
+fn extension_from_filename(filename: &str) -> Option<&str> {
     path::Path::new(filename)
         .extension()
         .and_then(ffi::OsStr::to_str)
 }
 
 fn is_python(filename: impl AsRef<str>) -> bool {
-    if let Some(ext) = get_extension_from_filename(filename.as_ref()) {
+    if let Some(ext) = extension_from_filename(filename.as_ref()) {
         PY_FILE_EXTS.contains(&ext)
     } else {
         false

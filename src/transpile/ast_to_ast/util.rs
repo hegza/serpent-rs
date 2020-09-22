@@ -1,7 +1,7 @@
-use rustc_ap_rustc_ast::ast;
-use rustc_ap_rustc_span::symbol;
-
 use super::dummy;
+use rustc_ap_rustc_ast::ast;
+use rustc_ap_rustc_ast::token;
+use rustc_ap_rustc_span::symbol;
 
 /// Constructs an interned string for the identifier
 pub fn ident(from: &str) -> symbol::Ident {
@@ -45,4 +45,8 @@ pub fn str_to_path(id: &str) -> ast::Path {
         span: dummy::span(),
         segments,
     }
+}
+
+pub fn ast_lit_into_token_lit(kind: ast::LitKind) -> token::Lit {
+    kind.to_lit_token()
 }

@@ -22,7 +22,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
         match &expr.node {
             py::ExpressionType::BoolOp { op: _, values: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Binop { a, op, b } => {
-                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
+                return to_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx)
             }
             // Python subscript `a[b]` converts to Rust Index `a[b]`.
             py::ExpressionType::Subscript { a, b } => {
@@ -32,7 +32,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 return rs::ExprKind::Index(P(path), P(index));
             }
             py::ExpressionType::Unop { op, a } => {
-                return into_rs_un_op(UnOp::from_py(op, ctx), a, ctx)
+                return to_rs_un_op(UnOp::from_py(op, ctx), a, ctx)
             }
             py::ExpressionType::Await { value: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Yield { value: _ } => ctx.unimplemented_item(expr),
@@ -45,7 +45,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 }
                 let op = ops.first().unwrap();
                 let (a, b) = (&vals[0], &vals[1]);
-                return into_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx);
+                return to_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx);
             }
             // An attribute maps to a field access
             py::ExpressionType::Attribute { value, name } => {
@@ -57,14 +57,14 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 function,
                 args,
                 keywords,
-            } => return into_rs_call(function, args, keywords, ctx),
+            } => return to_rs_call(function, args, keywords, ctx),
             py::ExpressionType::Number { value } => {
                 return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
             }
             py::ExpressionType::List { elements } =>
             // A `vec![]` expression is a sensible default for a list expression
             {
-                return into_rs_array(elements, ctx)
+                return to_rs_array(elements, ctx)
             }
             py::ExpressionType::Tuple { elements } => {
                 return rs::ExprKind::Tup(
@@ -76,7 +76,10 @@ impl FromPy<py::Expression> for rs::ExprKind {
             }
             py::ExpressionType::Dict { elements: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Set { elements: _ } => ctx.unimplemented_item(expr),
-            py::ExpressionType::Comprehension { kind: _, generators: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::Comprehension {
+                kind: _,
+                generators: _,
+            } => ctx.unimplemented_item(expr),
             py::ExpressionType::Starred { value: _ } => ctx.unimplemented_item(expr),
             py::ExpressionType::Slice { elements } => {
                 if elements[2].node != py::ExpressionType::None {
@@ -100,8 +103,14 @@ impl FromPy<py::Expression> for rs::ExprKind {
             // An identifier in an expression is probably a rs::Path
             py::ExpressionType::Identifier { name } => return id_to_path(name, ctx),
             py::ExpressionType::Lambda { args: _, body: _ } => ctx.unimplemented_item(expr),
-            py::ExpressionType::IfExpression { test: _, body: _, orelse: _ } => ctx.unimplemented_item(expr),
-            py::ExpressionType::NamedExpression { left: _, right: _ } => ctx.unimplemented_item(expr),
+            py::ExpressionType::IfExpression {
+                test: _,
+                body: _,
+                orelse: _,
+            } => ctx.unimplemented_item(expr),
+            py::ExpressionType::NamedExpression { left: _, right: _ } => {
+                ctx.unimplemented_item(expr)
+            }
             py::ExpressionType::True => ctx.unimplemented_item(expr),
             py::ExpressionType::False => ctx.unimplemented_item(expr),
             py::ExpressionType::None => ctx.unimplemented_item(expr),
@@ -119,7 +128,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
     }
 }
 
-fn into_rs_array(elements: &[py::Expression], ctx: &mut AstContext) -> rs::ExprKind {
+fn to_rs_array(elements: &[py::Expression], ctx: &mut AstContext) -> rs::ExprKind {
     rs::ExprKind::Array(
         elements
             .iter()
@@ -130,7 +139,7 @@ fn into_rs_array(elements: &[py::Expression], ctx: &mut AstContext) -> rs::ExprK
 
 // FIXME: can't generate rs_vec_macro, because tokens are not available
 /*
-fn into_rs_vec_macro(elements: &[py::Expression], ctx: &mut AstContext) -> rs::MacCall {
+fn to_rs_vec_macro(elements: &[py::Expression], ctx: &mut AstContext) -> rs::MacCall {
     let args = elements
         .iter()
         .map(|expr| {
@@ -208,7 +217,7 @@ fn id_to_path(id: &str, _ctx: &mut AstContext) -> rs::ExprKind {
     rs::ExprKind::Path(None, path)
 }
 
-fn into_rs_un_op(kind: UnOp, a: &Box<py::Expression>, ctx: &mut AstContext) -> rs::ExprKind {
+fn to_rs_un_op(kind: UnOp, a: &Box<py::Expression>, ctx: &mut AstContext) -> rs::ExprKind {
     let a = rs::Expr::from_py(a, ctx);
 
     match kind {
@@ -224,7 +233,7 @@ fn into_rs_un_op(kind: UnOp, a: &Box<py::Expression>, ctx: &mut AstContext) -> r
             // is defined as -(x+1). It only applies to integral numbers.
             let one_kind = rs::LitKind::Int(1, rs::LitIntType::Unsuffixed);
             let one = dummy::expr(rs::ExprKind::Lit(rs::Lit {
-                token: dummy::token(one_kind.clone()),
+                token: util::ast_lit_into_token_lit(one_kind.clone()),
                 kind: one_kind,
                 span: dummy::span(),
             }));
@@ -242,7 +251,7 @@ fn into_rs_un_op(kind: UnOp, a: &Box<py::Expression>, ctx: &mut AstContext) -> r
     }
 }
 
-fn into_rs_bin_op(
+fn to_rs_bin_op(
     kind: BinOp,
     a: &py::Expression,
     b: &py::Expression,
@@ -288,7 +297,7 @@ fn into_rs_bin_op(
 
 /// Returns an `rs::MethodCall` if the function is an attribute, `rs::Call`
 /// otherwise
-fn into_rs_call(
+fn to_rs_call(
     function: &Box<py::Expression>,
     args: &[py::Expression],
     keywords: &Vec<py::Keyword>,
@@ -454,7 +463,7 @@ impl FromPy<py::Number> for rs::Lit {
     fn from_py(number: &py::Number, ctx: &mut AstContext) -> Self {
         let kind = rs::LitKind::from_py(number, ctx);
         rs::Lit {
-            token: dummy::token(kind.clone()),
+            token: util::ast_lit_into_token_lit(kind.clone()),
             kind,
             span: dummy::span(),
         }
@@ -465,7 +474,7 @@ impl FromPy<py::StringGroup> for rs::Lit {
     fn from_py(sg: &py::StringGroup, ctx: &mut AstContext) -> Self {
         let kind = rs::LitKind::from_py(sg, ctx);
         rs::Lit {
-            token: dummy::token(kind.clone()),
+            token: util::ast_lit_into_token_lit(kind.clone()),
             kind,
             span: dummy::span(),
         }
