@@ -11,7 +11,7 @@ use crate::{
     output::TranspiledString, PyModule,
 };
 use ast_to_ast::TranspileNode;
-use context::{AstContext, ProgramContext};
+use context::{AstContext, ProgramContext, RustAst};
 use itertools::Itertools;
 use log::info;
 use parser_ext::{parse_comments, parse_orphan_newlines};
@@ -19,41 +19,6 @@ use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
 use std::{fs, path};
-
-/// Transpiles given Python source code to Rust source code assuming no other
-/// module context.
-///
-/// # Arguments
-///
-/// * `infer_main` - Whether to create a runnable main function from
-///   free-standing Python code.
-pub fn transpile_str(src: &str, cfg: &TranspileConfig) -> Result<TranspiledString, ApiError> {
-    let py_nodes = parse_str_to_py_ast(&src)?;
-
-    // The Python program is a sequence of statements, comments, and newlines
-    // which can be translated to Rust
-    let dummy = vec![];
-    let mut context = AstContext::new(&dummy, &py_nodes, &cfg);
-    for py_node in &py_nodes {
-        py_node
-            .transpile(&mut context)
-            .map_err(|inner| inner.with_source(&src, None))?;
-    }
-
-    let rust_ast = context
-        .finish()
-        .map_err(|inner| inner.with_source(&src, None))?;
-
-    let out_str = codegen::ast_to_rust(&rust_ast, &cfg)?;
-
-    let out = TranspiledString {
-        python_source: src.to_owned(),
-        python_ast: py_nodes,
-        rust_ast,
-        rust_target: out_str,
-    };
-    Ok(out)
-}
 
 /// Transpiles a module from the given directory to Rust.
 pub fn transpile_module_dir(
@@ -82,6 +47,53 @@ pub fn transpile_module_dir(
     Ok(out)
 }
 
+type PythonAst = Vec<python::NodeKind>;
+
+fn ast_to_ast(
+    py_ast: &PythonAst,
+    relative_mod_symbols: &[String],
+    cfg: &TranspileConfig,
+) -> Result<RustAst, crate::error::TranspileNodeError> {
+    let mut ast_ctx = AstContext::new(&relative_mod_symbols, py_ast, cfg);
+    for node in py_ast {
+        node.transpile(&mut ast_ctx)?;
+    }
+
+    ast_ctx.finish()
+}
+
+fn codegen(rust_ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ApiError> {
+    codegen::ast_to_rust(rust_ast, cfg).map_err(|inner| ApiError::from(inner))
+}
+
+/// Transpiles given Python source code to Rust source code assuming no other
+/// module context.
+///
+/// # Arguments
+///
+/// * `infer_main` - Whether to create a runnable main function from
+///   free-standing Python code.
+pub fn transpile_str(src: &str, cfg: &TranspileConfig) -> Result<TranspiledString, ApiError> {
+    let ast = parse_str_to_py_ast(&src)?;
+
+    // The Python program is a sequence of statements, comments, and newlines
+    // which can be translated to Rust
+    let dummy_relat_modules = vec![];
+    let rust_ast = ast_to_ast(&ast, &dummy_relat_modules, &cfg)
+        .map_err(|inner| inner.with_source(&src, None))?;
+
+    // Print the Rust AST as code
+    let out_str = codegen(&rust_ast, &cfg)?;
+
+    let out = TranspiledString {
+        python_source: src.to_owned(),
+        python_ast: ast,
+        rust_ast,
+        rust_target: out_str,
+    };
+    Ok(out)
+}
+
 fn transpile_file(
     path: &path::PathBuf,
     ctx: &mut ProgramContext,
@@ -101,20 +113,12 @@ fn transpile_file(
     let cfg = TranspileConfig::default();
     let result: Result<(Vec<rust::NodeKind>, String), ApiError> =
         with_default_session_globals(|| {
-            let mut ast_ctx = AstContext::new(&relative_mod_symbols, &ast, &cfg);
-            for node in &ast {
-                node.transpile(&mut ast_ctx).map_err(|inner| {
-                    inner.with_source(&content, Some(path.to_string_lossy().to_string()))
-                })?;
-            }
-
-            let rust_ast = ast_ctx.finish().map_err(|inner| {
+            let rust_ast = ast_to_ast(&ast, &relative_mod_symbols, &cfg).map_err(|inner| {
                 inner.with_source(&content, Some(path.to_string_lossy().to_string()))
             })?;
 
             // Print the Rust AST as code
-            let rust_code =
-                codegen::ast_to_rust(&rust_ast, &cfg).map_err(|inner| ApiError::from(inner))?;
+            let rust_code = codegen(&rust_ast, &cfg)?;
             Ok((rust_ast, rust_code))
         });
 
