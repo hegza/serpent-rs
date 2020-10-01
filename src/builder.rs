@@ -43,7 +43,7 @@ impl Transpile for TranspileStringBuilder {
     type TranspileOutput = TranspiledString;
 
     fn transpile(&self) -> Result<Self::TranspileOutput, crate::ApiError> {
-        let cfg = self.cfg.unwrap_or_default();
+        let cfg = self.cfg.clone().unwrap_or_default();
 
         transpile::transpile_str(&self.py_source, &cfg)
     }

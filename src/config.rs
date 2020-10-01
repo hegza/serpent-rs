@@ -1,10 +1,19 @@
 /// Changes the behavior of the transpiler.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TranspileConfig {
     /// What to do when an unimplemented AST-to-AST translation item is
     /// encountered.
     pub on_missing_impl: MissingImplBehavior,
-    pub infer_main: bool,
+    pub infer_options: Vec<InferOption>,
+}
+
+impl Default for TranspileConfig {
+    fn default() -> Self {
+        TranspileConfig {
+            on_missing_impl: MissingImplBehavior::Omit,
+            infer_options: vec![],
+        }
+    }
 }
 
 /// Describes behavior for what should happen when an unimplemented AST-to-AST
@@ -26,11 +35,8 @@ pub enum MissingImplBehavior {
     PanicImmediately,
 }
 
-impl Default for TranspileConfig {
-    fn default() -> Self {
-        TranspileConfig {
-            on_missing_impl: MissingImplBehavior::Omit,
-            infer_main: false,
-        }
-    }
+/// Allow or deny inferring details for the Rust project structure based on the
+/// Python project structure.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum InferOption {
 }

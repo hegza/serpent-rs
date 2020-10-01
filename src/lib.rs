@@ -21,7 +21,7 @@
 //! }
 //! ```
 mod builder;
-mod config;
+pub mod config;
 mod error;
 mod fmt;
 pub mod output;

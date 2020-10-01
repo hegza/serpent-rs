@@ -17,7 +17,7 @@ use test_case::test_case;
 fn transpile_runnable(stmt: &str) -> String {
     TranspileStringBuilder::new(stmt.to_owned())
         .config(TranspileConfig {
-            infer_main: true,
+            infer_options: vec![],
             ..Default::default()
         })
         .transpile()

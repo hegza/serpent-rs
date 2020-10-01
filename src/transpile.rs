@@ -5,7 +5,7 @@ mod parser_ext;
 pub mod python;
 pub mod rust;
 
-use crate::config::TranspileConfig;
+use crate::config::{self, TranspileConfig};
 use crate::{
     error::ApiError, output::ModPath, output::TranspiledFile, output::TranspiledModule,
     output::TranspiledString, PyModule,
@@ -70,9 +70,6 @@ fn codegen(rust_ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ApiError
 /// module context.
 ///
 /// # Arguments
-///
-/// * `infer_main` - Whether to create a runnable main function from
-///   free-standing Python code.
 pub fn transpile_str(src: &str, cfg: &TranspileConfig) -> Result<TranspiledString, ApiError> {
     let ast = parse_str_to_py_ast(&src)?;
 
