@@ -66,7 +66,11 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
         py::StatementType::Assert { test: _, msg: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::Delete { targets: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::Assign { targets, value } => visit_assign(targets, value, ctx),
-        py::StatementType::AugAssign { target: _, op: _, value: _ } => ctx.unimplemented_item(stmt),
+        py::StatementType::AugAssign {
+            target: _,
+            op: _,
+            value: _,
+        } => ctx.unimplemented_item(stmt),
         py::StatementType::AnnAssign {
             target: _,
             annotation: _,
@@ -77,7 +81,11 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
         py::StatementType::Global { names: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::Nonlocal { names: _ } => ctx.unimplemented_item(stmt),
         py::StatementType::If { test, body, orelse } => visit_if(test, body, orelse, ctx),
-        py::StatementType::While { test: _, body: _, orelse: _ } => ctx.unimplemented_item(stmt),
+        py::StatementType::While {
+            test: _,
+            body: _,
+            orelse: _,
+        } => ctx.unimplemented_item(stmt),
         py::StatementType::With {
             is_async: _,
             items: _,
@@ -90,7 +98,10 @@ fn visit_statement(stmt: &py::Statement, ctx: &mut AstContext) {
             body,
             orelse,
         } => visit_for(target, iter, body, orelse, ctx),
-        py::StatementType::Raise { exception: _, cause: _ } => {}
+        py::StatementType::Raise {
+            exception: _,
+            cause: _,
+        } => {}
         py::StatementType::Try {
             body: _,
             handlers: _,
@@ -305,11 +316,12 @@ fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
     // Local or foreign import?
     let import_kind = ctx.identify_import(symbol);
 
-    let rust_node = match import_kind {
+    let is_local = match import_kind {
         // Create a `use crate::...` for identified local import
-        ImportKind::Local => create_use_node(true, symbol, alias.as_ref()),
-        ImportKind::Foreign => create_use_node(false, symbol, alias.as_ref()),
+        ImportKind::Local => true,
+        ImportKind::Foreign => false,
     };
+    let rust_node = create_use_node(is_local, symbol, alias.as_ref());
     ctx.emit(rust_node);
 }
 
