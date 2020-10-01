@@ -47,7 +47,6 @@ impl PyModule {
             .find(|&(_, de)| de.path().file_stem().expect("no filename") == "__init__")
         {
             Some((mod_idx, de)) => {
-                info!("__init__ module found in source, module is likely runnable");
                 let root_path = de.path();
                 info!("Setting {:?} as root module", &root_path);
                 root_mod_idx = Some(mod_idx);

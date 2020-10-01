@@ -53,12 +53,3 @@ pub fn item(ident: symbol::Ident, kind: ast::ItemKind) -> ast::Item {
         tokens: None,
     }
 }
-
-pub fn block(stmts: Vec<ast::Stmt>) -> ast::Block {
-    ast::Block {
-        stmts,
-        id: node_id(),
-        rules: ast::BlockCheckMode::Default,
-        span: span(),
-    }
-}
