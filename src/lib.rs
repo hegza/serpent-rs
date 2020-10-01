@@ -39,6 +39,7 @@ pub use crate::output::{ModPath, TranspiledFile, TranspiledModule, TranspiledStr
 pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
+use output::TranspiledFileKind;
 use rustc_ap_rustc_span::with_default_session_globals;
 use std::{fs, path};
 use transpile::transpile_module_dir;
@@ -98,7 +99,7 @@ pub fn transpile_str(src: &str) -> Result<TranspiledString> {
 /// }
 /// ```
 pub fn transpile_module(dir_path: impl AsRef<path::Path>) -> Result<TranspiledModule> {
-    transpile_module_dir(dir_path)
+    transpile_module_dir(dir_path, &TranspileConfig::default())
 }
 
 pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledFile> {
@@ -106,7 +107,11 @@ pub fn transpile_file(file_path: impl AsRef<path::Path>) -> Result<TranspiledFil
         let path = file_path.as_ref();
         let content = fs::read_to_string(path)?;
         let transpiled = transpile_str(&content)?;
-        Ok(TranspiledFile(path.to_path_buf(), transpiled))
+        Ok(TranspiledFile {
+            source_path: path.to_path_buf(),
+            kind: TranspiledFileKind::default(),
+            content: transpiled,
+        })
     })
 }
 
@@ -119,11 +124,12 @@ pub fn transpile_standalone_line_in_file(
     let content = fs::read_to_string(path)?;
     match content.lines().nth(line as usize) {
         Some(line_content) => transpile_str(line_content),
-        None => Err(ApiError::LineParameter {
+        None => Err(error::TraceError::LineParameter {
             requested: line,
             file: path.to_str().unwrap().to_owned(),
             actual_line_count: content.lines().count(),
-        }),
+        }
+        .into()),
     }
 }
 

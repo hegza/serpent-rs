@@ -5,12 +5,16 @@ mod parser_ext;
 pub mod python;
 pub mod rust;
 
-use crate::config::{self, TranspileConfig};
+use crate::{
+    config::{self, TranspileConfig},
+    output::TranspiledFileKind,
+};
 use crate::{
     error::ApiError, output::ModPath, output::TranspiledFile, output::TranspiledModule,
     output::TranspiledString, PyModule,
 };
 use ast_to_ast::TranspileNode;
+use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
 use itertools::Itertools;
 use log::info;
@@ -18,12 +22,19 @@ use parser_ext::{parse_comments, parse_orphan_newlines};
 use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
-use std::{fs, path};
+use std::{ffi, fs, path};
 
 /// Transpiles a module from the given directory to Rust.
 pub fn transpile_module_dir(
     dir_path: impl AsRef<path::Path>,
+    cfg: &TranspileConfig,
 ) -> Result<TranspiledModule, ApiError> {
+    let dir_path = dir_path.as_ref();
+    info!(
+        "Transpiling module from directory {:?} with config {:?}",
+        dir_path, cfg
+    );
+
     let py_module = PyModule::from_dir_path(dir_path)?;
     let files = py_module.files();
 
@@ -32,7 +43,7 @@ pub fn transpile_module_dir(
     let mut transpiled_sources = Vec::with_capacity(files.len());
     for py_path in &files {
         // Transpile this file
-        let transpiled = transpile_file(py_path, &mut prog_ctx)?;
+        let transpiled = transpile_file(py_path, &mut prog_ctx, cfg)?;
         let mod_path =
             ModPath::from_py_module_symbol(py_module.module_symbol_for_file(py_path).unwrap());
 
@@ -91,9 +102,13 @@ pub fn transpile_str(src: &str, cfg: &TranspileConfig) -> Result<TranspiledStrin
     Ok(out)
 }
 
+/// Transpiles a file from given path. Returns the transpiled file or ApiError.
+/// This is private because files cannot be transpiled without module context.
+/// Call transpile_str for file contents instead.
 fn transpile_file(
     path: &path::PathBuf,
     ctx: &mut ProgramContext,
+    cfg: &TranspileConfig,
 ) -> Result<TranspiledFile, ApiError> {
     info!("Parsing {:?} into Python AST", path);
 
@@ -107,7 +122,6 @@ fn transpile_file(
     let relative_mod_symbols = ctx.source_module().resolve_mod_symbols_relative_to(path);
 
     // Transform the Python AST into a Rust AST
-    let cfg = TranspileConfig::default();
     let result: Result<(Vec<rust::NodeKind>, String), ApiError> =
         with_default_session_globals(|| {
             let rust_ast = ast_to_ast(&ast, &relative_mod_symbols, &cfg).map_err(|inner| {
@@ -121,22 +135,41 @@ fn transpile_file(
 
     let (rust_ast, out_str) = result?;
 
-    let out = TranspiledFile(
-        path.to_owned(),
-        TranspiledString {
+    let kind = maybe_check_file_kind(path, cfg);
+
+    let out = TranspiledFile {
+        source_path: path.to_owned(),
+        kind,
+        content: TranspiledString {
             python_source: content,
             python_ast: ast,
             rust_ast,
             rust_target: out_str,
         },
-    );
+    };
 
     Ok(out)
 }
 
+/// Checks for special file kinds based on configuration options.
+fn maybe_check_file_kind(path: &path::Path, cfg: &TranspileConfig) -> TranspiledFileKind {
+    if path.file_stem() == Some(ffi::OsStr::new("__init__")) {
+        if cfg.infer_options.contains(&InferOption::InitFileIntoMainRs) {
+            info!("Detected {:?} as source for main.rs", path);
+            TranspiledFileKind::MainRs
+        } else if cfg.infer_options.contains(&InferOption::InitFileIntoLibRs) {
+            info!("Detected {:?} as source for lib.rs", path);
+            TranspiledFileKind::LibRs
+        } else {
+            TranspiledFileKind::Normal
+        }
+    } else {
+        TranspiledFileKind::Normal
+    }
+}
+
 fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, ApiError> {
     // Parse Python source into a Python AST using RustPython
-    info!("Parsing str into Python AST");
     let py_ast = py_parser::parse_program(src)?;
     let stmt_nodes = py_ast
         .statements

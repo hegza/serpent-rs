@@ -428,7 +428,7 @@ fn create_param(param: &py::Parameter, ctx: &mut AstContext) -> rs::Param {
     }
 }
 
-fn create_use_node(is_local: bool, symbol: &str, alias: Option<&String>) -> rust::NodeKind {
+fn create_use_node(is_local: bool, py_symbol: &str, alias: Option<&String>) -> rust::NodeKind {
     // Map Python alias into Rust Ident
     let alias = alias.map(|s| util::ident(s));
 
@@ -438,7 +438,11 @@ fn create_use_node(is_local: bool, symbol: &str, alias: Option<&String>) -> rust
     if is_local {
         segments.push(rs::PathSegment::from_ident(util::ident("crate")));
     }
-    segments.push(rs::PathSegment::from_ident(util::ident(&symbol)));
+    segments.extend(
+        py_symbol
+            .split(".")
+            .map(|s| rs::PathSegment::from_ident(util::ident(s))),
+    );
 
     let prefix = rs::Path {
         span: dummy::span(),

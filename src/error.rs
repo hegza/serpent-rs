@@ -47,14 +47,8 @@ pub enum ApiError {
     /// An error that occurred while expanding a Rust AST into Rust source code.
     #[error("Rust AST expansion error")]
     Expand(#[from] ExpandError),
-    #[error(
-        "Requested for line {requested} in {file:?} but the file has {actual_line_count} lines"
-    )]
-    LineParameter {
-        requested: usize,
-        file: String,
-        actual_line_count: usize,
-    },
+    #[error("Trace error")]
+    TraceError(#[from] TraceError),
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients
@@ -187,4 +181,16 @@ pub enum ExpandError {
     /// Fidelity print is not implemented for this item
     #[error("no implementation for node: {0}")]
     Unimplemented(String),
+}
+
+#[derive(ThisError, Debug, Clone)]
+pub enum TraceError {
+    #[error("Requested line {requested} in {file:?} but the file has {actual_line_count} lines")]
+    LineParameter {
+        requested: usize,
+        file: String,
+        actual_line_count: usize,
+    },
+    #[error("Span not found for line {0}")]
+    SpanNotFound(usize),
 }

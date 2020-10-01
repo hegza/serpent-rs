@@ -11,7 +11,7 @@ impl Default for TranspileConfig {
     fn default() -> Self {
         TranspileConfig {
             on_missing_impl: MissingImplBehavior::Omit,
-            infer_options: vec![],
+            infer_options: vec![InferOption::InitFileIntoMainRs, InferOption::InitFnIntoMain],
         }
     }
 }
@@ -39,4 +39,13 @@ pub enum MissingImplBehavior {
 /// Python project structure.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum InferOption {
+    /// Allows the transpiler to detect and rename an `__init__.py` file as
+    /// `main.rs`.
+    InitFileIntoMainRs,
+    /// Allows the transpiler to detect and rename an `__init__.py` file as
+    /// `lib.rs`.
+    InitFileIntoLibRs,
+    /// Allows the transpiler to detect and rename an `__init__` function as
+    /// `main`.
+    InitFnIntoMain,
 }

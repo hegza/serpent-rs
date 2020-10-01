@@ -1,4 +1,4 @@
-use serpent::{Transpile, TranspileConfig, TranspileStringBuilder};
+use serpent::{config::InferOption, Transpile, TranspileConfig, TranspileStringBuilder};
 use test_case::test_case;
 
 #[test_case(
@@ -17,7 +17,7 @@ use test_case::test_case;
 fn transpile_runnable(stmt: &str) -> String {
     TranspileStringBuilder::new(stmt.to_owned())
         .config(TranspileConfig {
-            infer_options: vec![],
+            infer_options: vec![InferOption::InitFnIntoMain],
             ..Default::default()
         })
         .transpile()
