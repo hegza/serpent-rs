@@ -17,7 +17,7 @@ use ast_to_ast::TranspileNode;
 use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
 use itertools::Itertools;
-use log::info;
+use log::{info, warn};
 use parser_ext::{parse_comments, parse_orphan_newlines};
 use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
@@ -124,9 +124,11 @@ fn transpile_file(
     // Transform the Python AST into a Rust AST
     let result: Result<(Vec<rust::NodeKind>, String), ApiError> =
         with_default_session_globals(|| {
-            let rust_ast = ast_to_ast(&ast, &relative_mod_symbols, &cfg).map_err(|inner| {
+            let mut rust_ast = ast_to_ast(&ast, &relative_mod_symbols, &cfg).map_err(|inner| {
                 inner.with_source(&content, Some(path.to_string_lossy().to_string()))
             })?;
+
+            prune_top_level_statements(&mut rust_ast);
 
             // Print the Rust AST as code
             let rust_code = codegen(&rust_ast, &cfg)?;
@@ -211,4 +213,20 @@ fn compare_locations(a_loc: &Location, b_loc: &Location) -> bool {
     } else {
         false
     }
+}
+
+/// Prunes top-level statements because they are forbidden in Rust.
+// HACK: needs more detail, because this would also prune top-level items and
+// Python comments like `""" comment """`.
+fn prune_top_level_statements(rust_ast: &mut RustAst) {
+    rust_ast.retain(|node| match node {
+        rust::NodeKind::Stmt(stmt) => {
+            warn!(
+                "Removed top-level statement. Rust does not support top-level statements: {:?}",
+                stmt
+            );
+            false
+        }
+        _ => true,
+    });
 }
