@@ -3,6 +3,7 @@ mod codegen;
 mod context;
 mod parser_ext;
 pub mod python;
+mod rs_ast;
 pub mod rust;
 
 use crate::{
@@ -112,6 +113,8 @@ fn transpile_file(
 ) -> Result<TranspiledFile, ApiError> {
     info!("Parsing {:?} into Python AST", path);
 
+    let kind = maybe_check_file_kind(path, cfg);
+
     // Parse file into an AST
     let content =
         normalize_line_endings::normalized(fs::read_to_string(path)?.chars()).collect::<String>();
@@ -130,14 +133,19 @@ fn transpile_file(
 
             prune_top_level_statements(&mut rust_ast);
 
+            // Insert `mod {}` to crate root.
+            maybe_insert_crate_local_mods(
+                &kind,
+                &mut rust_ast,
+                &ctx.source_module().resolve_global_mod_symbols(),
+            );
+
             // Print the Rust AST as code
             let rust_code = codegen(&rust_ast, &cfg)?;
             Ok((rust_ast, rust_code))
         });
 
     let (rust_ast, out_str) = result?;
-
-    let kind = maybe_check_file_kind(path, cfg);
 
     let out = TranspiledFile {
         source_path: path.to_owned(),
@@ -167,6 +175,21 @@ fn maybe_check_file_kind(path: &path::Path, cfg: &TranspileConfig) -> Transpiled
         }
     } else {
         TranspiledFileKind::Normal
+    }
+}
+
+fn maybe_insert_crate_local_mods(
+    kind: &TranspiledFileKind,
+    rust_ast: &mut RustAst,
+    mod_symbols: &[String],
+) {
+    // TODO: do not use kind, but instead determine the "crate root" using a
+    // higher-level structure, then insert the mods to the crate root.
+    match kind {
+        TranspiledFileKind::LibRs | TranspiledFileKind::MainRs => {
+            rs_ast::insert_crate_local_mods(rust_ast, mod_symbols);
+        }
+        _ => {}
     }
 }
 
