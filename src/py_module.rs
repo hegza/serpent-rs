@@ -68,6 +68,7 @@ impl PyModule {
                 .strip_prefix(&root_path_prefix)
                 .expect("could not get relative path to root");
             let module_path = relative_path_to_root
+                .with_extension("")
                 .iter()
                 .map(|sub_path| {
                     sub_path
