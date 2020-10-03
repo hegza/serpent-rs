@@ -39,9 +39,10 @@ pub use crate::output::{ModPath, TranspiledFile, TranspiledModule, TranspiledStr
 pub use crate::py_module::{ImportError, PyModule};
 
 use ctor::ctor;
+use fs_err as fs;
 use output::TranspiledFileKind;
 use rustc_ap_rustc_span::with_default_session_globals;
-use std::{fs, path};
+use std::path;
 use transpile::transpile_module_dir;
 
 /// A type alias for `Result<T, serpent::SerpentError>`. All API functions

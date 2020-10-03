@@ -17,13 +17,14 @@ use crate::{
 use ast_to_ast::TranspileNode;
 use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
+use fs_err as fs;
 use itertools::Itertools;
 use log::{info, warn};
 use parser_ext::{parse_comments, parse_orphan_newlines};
 use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
-use std::{ffi, fs, path};
+use std::{ffi, path};
 
 /// Transpiles a module from the given directory to Rust.
 pub fn transpile_module_dir(

@@ -13,7 +13,8 @@
 use crate::{config::TranspileConfig, TranspiledString};
 use crate::{transpile, TranspiledModule};
 
-use std::{fs, ops, path};
+use fs_err as fs;
+use std::{ops, path};
 
 pub struct TranspileFileBuilder {
     inner: TranspileBuilder,

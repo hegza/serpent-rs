@@ -1,4 +1,5 @@
-use std::{collections::HashMap, ffi, fs, io, path, result};
+use fs_err as fs;
+use std::{collections::HashMap, ffi, io, path, result};
 
 use crate::ApiError;
 use log::{info, trace, warn};
