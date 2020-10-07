@@ -42,6 +42,7 @@ lazy_static = "^1.4"
 normalize-line-endings = "0.3.0"
 # Drop-in replacement for std::fs with better errors.
 fs-err = "2.5.0"
+toml = "0.5.6"
 
 [dev-dependencies]
 sourcefile = "^0.1"
