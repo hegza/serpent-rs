@@ -5,6 +5,8 @@ pub struct TranspileConfig {
     /// encountered.
     pub on_missing_impl: MissingImplBehavior,
     pub infer_options: Vec<InferOption>,
+    pub extra_dependencies: toml::map::Map,
+    pub remap: toml::map::Map,
 }
 
 impl Default for TranspileConfig {
