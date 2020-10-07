@@ -1,0 +1,12 @@
+
+[dependencies]
+ndarray = "0.13.1"
+ndarray-stats = "0.3.0"
+ndarray-rand = "0.11.0"
+
+[numpy]
+remap = "crate ndarray"
+
+[numpy.random.rand]
+remap = "call ndarray::Array::random"
+push_parameter = "call ndarray_rand::rand_distr::Uniform(0., 1.)"
