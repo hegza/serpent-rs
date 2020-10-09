@@ -308,6 +308,8 @@ fn visit_import_from(
 ///
 /// Foreign imports are also stored for later processing.
 fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
+    ctx.detect_use_alias(name);
+
     // De-structure import symbol
     let py::ImportSymbol { symbol, alias } = name;
 

@@ -1,5 +1,6 @@
 mod error_strategy;
 mod print;
+mod remap;
 
 pub(crate) use print::PrintContext;
 
@@ -7,10 +8,12 @@ use super::{ast_to_ast::dummy, python};
 use crate::config::TranspileConfig;
 use crate::{error::TranspileNodeError, transpile::rust, PyModule};
 use error_strategy::*;
-use log::trace;
+use log::{error, trace};
 use python::Node;
+use remap::RemapContext;
 use rustc_ap_rustc_ast::ast as rs;
 use rustc_ap_rustc_ast::ptr::P;
+use rustpython_parser::ast as py;
 use rustpython_parser::ast::Located;
 use std::fmt::Debug;
 
@@ -56,6 +59,7 @@ pub(crate) struct AstContext<'py_ast> {
     /// by current depth. Blocks get removed from this Vec after they're
     /// finished and attached to their top-level nodes.
     block_recurse: Vec<Vec<rust::NodeKind>>,
+    remap_ctx: RemapContext,
 }
 
 impl<'py_ast> AstContext<'py_ast> {
@@ -86,6 +90,7 @@ impl<'py_ast> AstContext<'py_ast> {
             emit_placeholders,
             depth: 0,
             block_recurse: vec![Vec::new()],
+            remap_ctx: RemapContext::new(),
         }
     }
 
@@ -97,6 +102,10 @@ impl<'py_ast> AstContext<'py_ast> {
     /// Call to emit a transpiled Rust AST node.
     pub fn emit(&mut self, rust_node: rust::NodeKind) {
         self.block_recurse[self.depth].push(rust_node);
+    }
+
+    pub fn detect_use_alias(&mut self, import_symbol: &py::ImportSymbol) {
+        self.remap_ctx.detect_use_alias(import_symbol)
     }
 
     /// Recurse into a block, eg. in a function
