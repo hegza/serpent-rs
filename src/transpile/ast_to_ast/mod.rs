@@ -533,18 +533,3 @@ fn create_function_node(
 
     rust_node
 }
-
-/*
-
-// TODO: add indentation information somehow
-fn visit_body(body: &py::Suite, cursor: Option<&Cursor<PyNode>>) -> Result<rs::Block> {
-    let stmts = body
-        .into_iter()
-        .map(|py_stmt| visit_statement(&py_stmt.node, Some(&py_stmt.location), cursor))
-        .collect::<Result<Vec<rs::Stmt>>>()?;
-    Ok(rs::Block {
-        brace_token: rs::token::Brace(proc_macro2::Span::call_site()),
-        stmts,
-    })
-}
-*/
