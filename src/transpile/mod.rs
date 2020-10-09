@@ -38,7 +38,10 @@ pub fn transpile_module_dir(
     );
 
     let py_module = PyModule::from_dir_path(dir_path)?;
-    let files = py_module.files();
+    let mut files = py_module.files();
+
+    // Stabilize file-order using std::cmp::Eq for std::path::PathBuf
+    files.sort();
 
     // Transpile files one-by-one
     let mut prog_ctx = ProgramContext::new(&py_module);
