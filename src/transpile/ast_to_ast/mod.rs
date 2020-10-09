@@ -252,9 +252,8 @@ fn visit_return(value: &Option<py::Expression>, ctx: &mut AstContext) {
 ///
 /// Emits a `use crate::...` for identified, local imports and stores
 /// unidentified, foreign imports for later processing
-///
-/// TODO: merge Python import trees into Rust use trees instead of emitting a
-/// separate tree for each
+// TODO: merge Python import trees into Rust use trees instead of emitting a
+// separate tree for each
 fn visit_import(names: &Vec<py::ImportSymbol>, ctx: &mut AstContext) {
     for name in names {
         visit_import_symbol(name, ctx);
@@ -265,9 +264,8 @@ fn visit_import(names: &Vec<py::ImportSymbol>, ctx: &mut AstContext) {
 ///
 /// Emits a `use crate::...` for identified, local imports and stores
 /// unidentified, foreign imports for later processing
-///
-/// TODO: merge Python import trees into Rust use trees instead of emitting a
-/// separate tree for each
+// TODO: merge Python import trees into Rust use trees instead of emitting a
+// separate tree for each
 fn visit_import_from(
     level: &usize,
     module: &Option<String>,
@@ -292,12 +290,12 @@ fn visit_import_from(
             .collect::<Vec<py::ImportSymbol>>()
     });
 
-    let names = match names_with_module {
+    let symbols = match names_with_module {
         Some(ref names) => names,
         None => names,
     };
 
-    for name in names {
+    for name in symbols {
         visit_import_symbol(name, ctx);
     }
 }
