@@ -1,12 +1,14 @@
+use toml::{map::Map as TomlMap, value::Value as TomlValue};
+
 /// Changes the behavior of the transpiler.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TranspileConfig {
     /// What to do when an unimplemented AST-to-AST translation item is
     /// encountered.
     pub on_missing_impl: MissingImplBehavior,
     pub infer_options: Vec<InferOption>,
-    pub extra_dependencies: toml::map::Map,
-    pub remap: toml::map::Map,
+    pub extra_dependencies: Option<TomlMap<String, TomlValue>>,
+    pub remap: Option<TomlMap<String, TomlValue>>,
 }
 
 impl Default for TranspileConfig {
@@ -14,6 +16,8 @@ impl Default for TranspileConfig {
         TranspileConfig {
             on_missing_impl: MissingImplBehavior::Omit,
             infer_options: vec![InferOption::InitFileIntoMainRs, InferOption::InitFnIntoMain],
+            extra_dependencies: None,
+            remap: None,
         }
     }
 }

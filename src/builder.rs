@@ -12,8 +12,9 @@
 //! ```
 use crate::{config::TranspileConfig, TranspiledString};
 use crate::{transpile, TranspiledModule};
-
+use toml::{map::Map as TomlMap, value::Value as TomlValue};
 use fs_err as fs;
+
 use std::{ops, path};
 
 pub struct TranspileFileBuilder {
@@ -62,13 +63,15 @@ impl TranspileModuleBuilder {
 /// into Transpile Builder.
 pub struct TranspileBuilder {
     cfg: Option<TranspileConfig>,
+    dep_map: Option<TomlMap<String, TomlValue>>,
+    remap: Option<TomlMap<String, TomlValue>>,
 }
 
 impl TranspileBuilder {
     /// This not public because `TranspileBuilder` cannot be created directly.
     /// Use `Transpile*Builder` instead.
     fn new() -> TranspileBuilder {
-        TranspileBuilder { cfg: None }
+        TranspileBuilder { cfg: None, dep_map: None, remap: None }
     }
 }
 
@@ -82,7 +85,13 @@ impl Transpile for TranspileStringBuilder {
     type TranspileOutput = TranspiledString;
 
     fn transpile(&self) -> Result<Self::TranspileOutput, crate::ApiError> {
-        let cfg = self.cfg.clone().unwrap_or_default();
+        let mut cfg = self.cfg.clone().unwrap_or_default();
+        if let Some(add_deps) = self.dep_map.clone() {
+            cfg.extra_dependencies = Some(add_deps);
+        }
+        if let Some(remap) = self.remap.clone() {
+            cfg.remap = Some(remap);
+        }
 
         transpile::transpile_str(&self.py_source, &cfg)
     }
@@ -92,7 +101,13 @@ impl Transpile for TranspileFileBuilder {
     type TranspileOutput = TranspiledString;
 
     fn transpile(&self) -> Result<Self::TranspileOutput, crate::ApiError> {
-        let cfg = self.cfg.clone().unwrap_or_default();
+        let mut cfg = self.cfg.clone().unwrap_or_default();
+        if let Some(add_deps) = self.dep_map.clone() {
+            cfg.extra_dependencies = Some(add_deps);
+        }
+        if let Some(remap) = self.remap.clone() {
+            cfg.remap = Some(remap);
+        }
 
         let content = fs::read_to_string(&self.py_file)?;
 
@@ -104,7 +119,13 @@ impl Transpile for TranspileModuleBuilder {
     type TranspileOutput = TranspiledModule;
 
     fn transpile(&self) -> Result<Self::TranspileOutput, crate::ApiError> {
-        let cfg = self.cfg.clone().unwrap_or_default();
+        let mut cfg = self.cfg.clone().unwrap_or_default();
+        if let Some(add_deps) = self.dep_map.clone() {
+            cfg.extra_dependencies = Some(add_deps);
+        }
+        if let Some(remap) = self.remap.clone() {
+            cfg.remap = Some(remap);
+        }
 
         transpile::transpile_module_dir(&self.mod_path, &cfg)
     }
@@ -116,6 +137,16 @@ macro_rules! impl_builder {
             /// Uses `cfg` as the configuration for this builder.
             pub fn config(mut self, cfg: TranspileConfig) -> Self {
                 self.inner.cfg = Some(cfg);
+                self
+            }
+
+            pub fn set_dep_map(mut self, dep_map: TomlMap<String, TomlValue>) -> Self {
+                self.inner.dep_map = Some(dep_map);
+                self
+            }
+
+            pub fn set_remap(mut self, remap: TomlMap<String, TomlValue>) -> Self{
+                self.inner.remap = Some(remap);
                 self
             }
         }
