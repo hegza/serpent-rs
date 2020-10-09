@@ -57,7 +57,12 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 function,
                 args,
                 keywords,
-            } => return to_rs_call(function, args, keywords, ctx),
+            } => {
+                ctx.start_call();
+                let rs_call = to_rs_call(function, args, keywords, ctx);
+                ctx.end_call();
+                return rs_call;
+            }
             py::ExpressionType::Number { value } => {
                 return rs::ExprKind::Lit(rs::Lit::from_py(value, ctx))
             }

@@ -218,6 +218,13 @@ impl<'py_ast> AstContext<'py_ast> {
     fn current_source_node(&self) -> &python::NodeKind {
         &self.source_nodes[self.node_idx]
     }
+
+    pub fn start_call(&mut self) {
+        self.remap_ctx.start_call();
+    }
+    pub fn end_call(&mut self) {
+        self.remap_ctx.end_call();
+    }
 }
 
 #[derive(Debug, Clone)]
