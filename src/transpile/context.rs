@@ -241,6 +241,10 @@ impl<'py_ast> AstContext<'py_ast> {
     pub fn remap_function(&self, function: &py::ExpressionType) -> Option<Vec<String>> {
         self.remap_ctx.remap_function(function)
     }
+    /// Returns the remapped symbol
+    pub fn remap_symbol(&self, py_symbol: &str) -> Option<String> {
+        self.remap_ctx.remap_symbol(py_symbol)
+    }
 }
 
 #[derive(Debug, Clone)]

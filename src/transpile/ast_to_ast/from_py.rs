@@ -333,13 +333,9 @@ fn to_rs_call(
 
     // Check if this function is remapped
     if let Some(template) = ctx.remap_function(&function.node) {
-        // HACK: this code probably doesn't belong here
-        error!("Replacing with: {:?}", template);
-
         let mut ret = None;
 
         for template_str in &template {
-            error!("working with {:?}", template_str);
             // TODO: better error handling
             let mut iter = template_str.split_whitespace();
             let first_word = iter.nth(0).unwrap();

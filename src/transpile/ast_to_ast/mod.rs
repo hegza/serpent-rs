@@ -321,7 +321,7 @@ fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
         ImportKind::Local => true,
         ImportKind::Foreign => false,
     };
-    let rust_node = create_use_node(is_local, symbol, alias.as_ref());
+    let rust_node = create_use_node(is_local, symbol, alias.as_ref(), ctx);
     ctx.emit(rust_node);
 }
 
@@ -440,7 +440,18 @@ fn create_param(param: &py::Parameter, ctx: &mut AstContext) -> rs::Param {
     }
 }
 
-fn create_use_node(is_local: bool, py_symbol: &str, alias: Option<&String>) -> rust::NodeKind {
+fn create_use_node(
+    is_local: bool,
+    py_symbol: &str,
+    alias: Option<&String>,
+    ctx: &mut AstContext,
+) -> rust::NodeKind {
+    // Check if symbol is remapped
+    let py_symbol = ctx
+        .remap_symbol(py_symbol)
+        .or(Some(py_symbol.to_owned()))
+        .unwrap();
+
     // Map Python alias into Rust Ident
     let alias = alias.map(|s| util::ident(s));
 

@@ -47,7 +47,6 @@ pub fn transpile_module_dir(
     let mut prog_ctx = ProgramContext::new(&py_module);
     let mut transpiled_sources = Vec::with_capacity(files.len());
     for py_path in &files {
-        error!("Transpiling {:?}", py_path);
         // Transpile this file
         let transpiled = transpile_file(py_path, &mut prog_ctx, cfg)?;
         let mod_path =

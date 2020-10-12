@@ -1,5 +1,6 @@
 use crate::transpile::ast_to_ast::{from_py::FromPy, util};
-use log::error;
+use itertools::Itertools;
+use log::{error, warn};
 use rustc_ap_rustc_ast::ast as rs;
 use rustc_ap_rustc_span::symbol;
 use rustpython_parser::ast as py;
@@ -121,11 +122,40 @@ impl RemapContext {
         };
 
         if let Some(path) = path {
+            // Check if a remap exists
             if let Some(replacement_template) = self.remaps.get(&path) {
                 Some(replacement_template.to_vec())
             } else {
                 None
             }
+        } else {
+            None
+        }
+    }
+    /// Returns the remapped symbol
+    pub fn remap_symbol(&self, py_symbol: &str) -> Option<String> {
+        if let Some(replacement_templates) = self.remaps.get(&vec![py_symbol.to_owned()]) {
+            for template in replacement_templates {
+                let mut iter = template.split_whitespace();
+                let first_word = iter.nth(0);
+                if let Some(first_word) = first_word {
+                    match first_word {
+                        // HACK: only replace symbols of type "crate"
+                        "crate" => {
+                            let rest = iter.join(" ");
+                            return Some(rest);
+                        }
+                        _ => warn!("symbols will not be remapped if target is not 'crate'"),
+                    }
+                } else {
+                    warn!(
+                        "remap found for symbol {:?} but target string is empty",
+                        py_symbol
+                    )
+                }
+            }
+
+            return None;
         } else {
             None
         }
