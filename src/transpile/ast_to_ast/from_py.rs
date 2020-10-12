@@ -354,7 +354,8 @@ fn to_rs_call(
                         "call" => {
                             let template = iter.join(" ");
 
-                            let call = template_to_call(&template, args.clone());
+                            let path = rs::Path::from_ident(util::ident(&template));
+                            let call = rs::ExprKind::Path(None, path);
                             let push_expr = dummy::expr(call);
 
                             match ret {
