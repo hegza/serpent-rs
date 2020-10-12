@@ -7,6 +7,19 @@ ndarray-rand = "0.11.0"
 [numpy]
 remap = "crate ndarray"
 
+## Map log, sqrt, and exp to respective element-wise operations
+[numpy.log]
+remap = "call ndarray::ArrayBase::map"
+push_parameter = "f64::ln"
+
+[numpy.sqrt]
+remap = "call ndarray::ArrayBase::map"
+push_parameter = "f64::sqrt"
+
+[numpy.exp]
+remap = "call ndarray::ArrayBase::map"
+push_parameter = "f64::exp"
+
 [numpy.random.rand]
 remap = "call ndarray::Array::random"
 push_parameter = "call ndarray_rand::rand_distr::Uniform(0., 1.)"
