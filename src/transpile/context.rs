@@ -13,6 +13,7 @@ use python::Node;
 use remap::RemapContext;
 use rustc_ap_rustc_ast::ast as rs;
 use rustc_ap_rustc_ast::ptr::P;
+use rustc_ap_rustc_span::symbol;
 use rustpython_parser::ast as py;
 use rustpython_parser::ast::Located;
 use std::fmt::Debug;
@@ -82,6 +83,8 @@ impl<'py_ast> AstContext<'py_ast> {
             MissingImplBehavior::PanicImmediately => Box::new(AlwaysPanic {}),
         };
 
+        let remap_ctx = RemapContext::new(cfg.remap.as_ref());
+
         AstContext {
             source_nodes,
             node_idx: 0,
@@ -90,7 +93,7 @@ impl<'py_ast> AstContext<'py_ast> {
             emit_placeholders,
             depth: 0,
             block_recurse: vec![Vec::new()],
-            remap_ctx: RemapContext::new(),
+            remap_ctx,
         }
     }
 
@@ -224,6 +227,19 @@ impl<'py_ast> AstContext<'py_ast> {
     }
     pub fn end_call(&mut self) {
         self.remap_ctx.end_call();
+    }
+
+    pub fn get_remapped_attribute(
+        &self,
+        object: &py::ExpressionType,
+        name: &str,
+    ) -> Option<(rs::Expr, symbol::Ident)> {
+        self.remap_ctx.get_remapped_attribute(object, name)
+    }
+
+    /// Returns the remap template
+    pub fn remap_function(&self, function: &py::ExpressionType) -> Option<Vec<String>> {
+        self.remap_ctx.remap_function(function)
     }
 }
 

@@ -1,6 +1,6 @@
 //! TODO: Review all HACKs, FIXMEs
 pub mod dummy;
-mod from_py;
+pub mod from_py;
 pub mod util;
 
 use super::context::ImportKind;

@@ -4,9 +4,11 @@
 
 use super::{dummy, util};
 use crate::transpile::context::AstContext;
-use log::warn;
+use itertools::Itertools;
+use log::{error, warn};
 use rustc_ap_rustc_ast as rustc_ast;
 use rustc_ap_rustc_span::source_map::Spanned;
+use rustc_ap_rustc_span::symbol;
 use rustc_ast::{ast as rs, ptr::P};
 use rustpython_parser::ast as py;
 
@@ -47,10 +49,14 @@ impl FromPy<py::Expression> for rs::ExprKind {
                 let (a, b) = (&vals[0], &vals[1]);
                 return to_rs_bin_op(BinOp::from_py(op, ctx), a, b, ctx);
             }
-            // An attribute maps to a field access
+            // An attribute maps to field access
             py::ExpressionType::Attribute { value, name } => {
-                let object = rs::Expr::from_py(value, ctx);
-                let field = util::ident(name);
+                // Check for a remapping on the attribute
+                let (object, field) = ctx.get_remapped_attribute(&value.node, name).unwrap_or((
+                    rs::Expr::from_py(value, ctx),
+                    symbol::Ident::from_py(name, ctx),
+                ));
+
                 return rs::ExprKind::Field(P(object), field);
             }
             py::ExpressionType::Call {
@@ -130,6 +136,12 @@ impl FromPy<py::Expression> for rs::ExprKind {
             span: dummy::span(),
         };
         rs::ExprKind::Block(P(block), None)
+    }
+}
+
+impl FromPy<String> for symbol::Ident {
+    fn from_py(name: &String, ctx: &mut AstContext) -> Self {
+        util::ident(name)
     }
 }
 
@@ -300,26 +312,94 @@ fn to_rs_bin_op(
     )
 }
 
-/// Returns an `rs::MethodCall` if the function is an attribute, `rs::Call`
-/// otherwise
+/// Returns an `rs::MethodCall` if the source function is an attribute,
+/// `rs::Call` otherwise.
 fn to_rs_call(
     function: &Box<py::Expression>,
     args: &[py::Expression],
     keywords: &Vec<py::Keyword>,
     ctx: &mut AstContext,
 ) -> rs::ExprKind {
+    warn!("Mapping call: {:?}", function);
     if keywords.len() != 0 {
         ctx.unimplemented_parameter("call", "kewords", keywords);
     }
 
     // Transpile args
-    let args = args
+    let mut args: Vec<P<rs::Expr>> = args
         .iter()
         .map(|arg| P(rs::Expr::from_py(arg, ctx)))
         .collect();
 
+    // Check if this function is remapped
+    if let Some(template) = ctx.remap_function(&function.node) {
+        // HACK: this code probably doesn't belong here
+        error!("Replacing with: {:?}", template);
+
+        let mut ret = None;
+
+        for template_str in &template {
+            error!("working with {:?}", template_str);
+            // TODO: better error handling
+            let mut iter = template_str.split_whitespace();
+            let first_word = iter.nth(0).unwrap();
+            let template_rest = iter.join(" ");
+
+            match first_word {
+                "push_parameter" => {
+                    let mut iter = template_rest.split_whitespace();
+                    let first_word = iter.nth(0).unwrap();
+
+                    match first_word {
+                        "call" => {
+                            let template = iter.join(" ");
+
+                            let call = template_to_call(&template, args.clone());
+                            let push_expr = dummy::expr(call);
+
+                            match ret {
+                                Some(ref mut ret) => {
+                                    if let rs::ExprKind::Call(_func, args) = ret {
+                                        args.push(P(push_expr));
+                                    } else {
+                                        panic!()
+                                    }
+                                }
+                                None => args.push(P(push_expr)),
+                            }
+                        }
+                        first_word => {
+                            let template = std::iter::once(first_word).chain(iter).join(" ");
+
+                            let path = rs::Path::from_ident(util::ident(&template));
+                            let push_expr = dummy::expr(rs::ExprKind::Path(None, path));
+
+                            match ret {
+                                Some(ref mut ret) => {
+                                    if let rs::ExprKind::Call(_func, args) = ret {
+                                        args.push(P(push_expr));
+                                    } else {
+                                        panic!()
+                                    }
+                                }
+                                None => args.push(P(push_expr)),
+                            }
+                        }
+                    }
+                }
+                "call" => ret = Some(template_to_call(&template_rest, args.clone())),
+                "macro_call" => {
+                    error!("macro_call skipped");
+                    continue;
+                }
+                x => panic!("unknown first word: {:?}", x),
+            }
+        }
+
+        ret.unwrap_or(rs::ExprKind::Path(None, util::str_to_path("")))
+    }
     // Attribute access in the form of `value.name`
-    if let py::ExpressionType::Attribute { value, name } = &function.node {
+    else if let py::ExpressionType::Attribute { value, name } = &function.node {
         // The expression is a method call
 
         // Convert `value` into the method call receiver
@@ -328,7 +408,7 @@ fn to_rs_call(
         // Convert `name` into the function path
         let seg = util::str_to_path_seg(name);
 
-        let rec_and_args = vec![P(receiver)]
+        let receiver_and_args = vec![P(receiver)]
             .into_iter()
             .chain(args)
             .collect::<Vec<P<rs::Expr>>>();
@@ -336,7 +416,7 @@ fn to_rs_call(
         // The first element of the vector of an Expr is the expression that evaluates
         // to the object on which the method is being called on (the receiver), and the
         // remaining elements are the rest of the arguments.
-        rs::ExprKind::MethodCall(seg, rec_and_args, dummy::span())
+        rs::ExprKind::MethodCall(seg, receiver_and_args, dummy::span())
     } else {
         // The expression is not a method call
 
@@ -344,6 +424,21 @@ fn to_rs_call(
 
         rs::ExprKind::Call(P(function), args)
     }
+}
+
+fn template_to_call(template: &str, args: Vec<P<rs::Expr>>) -> rs::ExprKind {
+    // HACK: we just map everything to calls, ignoring any possibility of
+    // method_call
+    let path = rs::Path::from_ident(util::ident(&template));
+    let func = rs::ExprKind::Path(None, path);
+    let func: rs::Expr = rs::Expr {
+        id: dummy::node_id(),
+        kind: func,
+        span: dummy::span(),
+        attrs: dummy::attr_vec(),
+        tokens: None,
+    };
+    rs::ExprKind::Call(P(func), args)
 }
 
 /// Represents a binary operation in Rust. Extends rs::BinOp.

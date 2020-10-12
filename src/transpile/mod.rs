@@ -19,7 +19,7 @@ use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
 use fs_err as fs;
 use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use parser_ext::{parse_comments, parse_orphan_newlines};
 use python::Node;
 use rustc_ap_rustc_span::with_default_session_globals;
@@ -47,6 +47,7 @@ pub fn transpile_module_dir(
     let mut prog_ctx = ProgramContext::new(&py_module);
     let mut transpiled_sources = Vec::with_capacity(files.len());
     for py_path in &files {
+        error!("Transpiling {:?}", py_path);
         // Transpile this file
         let transpiled = transpile_file(py_path, &mut prog_ctx, cfg)?;
         let mod_path =
@@ -249,7 +250,7 @@ fn prune_top_level_statements(rust_ast: &mut RustAst) {
     rust_ast.retain(|node| match node {
         rust::NodeKind::Stmt(stmt) => {
             warn!("Removed a top-level statement. Rust does not support top-level statements.",);
-            debug!("Removed top-level statement: {:?}", stmt); 
+            debug!("Removed top-level statement: {:?}", stmt);
             false
         }
         _ => true,
