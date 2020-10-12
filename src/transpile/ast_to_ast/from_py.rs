@@ -297,7 +297,7 @@ fn to_rs_bin_op(
             }
         },
         BinOp::Unimplemented => {
-            // TODO: annotate with a comment, eg. `ctx.annotete()`
+            // TODO: annotate with a comment, eg. `ctx.annotate()`
             rs::BinOpKind::Add
         }
     };
