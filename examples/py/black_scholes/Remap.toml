@@ -1,8 +1,8 @@
-
 [dependencies]
 ndarray = "0.13.1"
 ndarray-stats = "0.3.0"
 ndarray-rand = "0.11.0"
+rand = "0.7.3"
 
 [numpy]
 remap = "crate ndarray"
@@ -22,4 +22,4 @@ push_parameter = "f64::exp"
 
 [numpy.random.rand]
 remap = "call ndarray::Array::random"
-push_parameter = "ndarray_rand::rand_distr::Uniform(0., 1.)"
+push_parameter = "rand::distributions::uniform::Uniform::new(0., 1.)"
