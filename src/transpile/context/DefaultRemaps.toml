@@ -1,0 +1,2 @@
+#[print]
+#remap = "macro_call println"
