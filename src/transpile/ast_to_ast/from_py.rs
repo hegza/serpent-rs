@@ -353,10 +353,7 @@ fn to_rs_call(
                     match first_word {
                         "call" => {
                             let template = iter.join(" ");
-
-                            let path = rs::Path::from_ident(util::ident(&template));
-                            let call = rs::ExprKind::Path(None, path);
-                            let push_expr = dummy::expr(call);
+                            let push_expr = dummy::expr(template_to_path(&template));
 
                             match ret {
                                 Some(ref mut ret) => {
@@ -371,9 +368,7 @@ fn to_rs_call(
                         }
                         first_word => {
                             let template = std::iter::once(first_word).chain(iter).join(" ");
-
-                            let path = rs::Path::from_ident(util::ident(&template));
-                            let push_expr = dummy::expr(rs::ExprKind::Path(None, path));
+                            let push_expr = dummy::expr(template_to_path(&template));
 
                             match ret {
                                 Some(ref mut ret) => {
@@ -440,6 +435,12 @@ fn template_to_call(template: &str, args: Vec<P<rs::Expr>>) -> rs::ExprKind {
         tokens: None,
     };
     rs::ExprKind::Call(P(func), args)
+}
+
+fn template_to_path(template: &str) -> rs::ExprKind {
+    let path = rs::Path::from_ident(util::ident(&template));
+    let call = rs::ExprKind::Path(None, path);
+    call
 }
 
 /// Represents a binary operation in Rust. Extends rs::BinOp.
