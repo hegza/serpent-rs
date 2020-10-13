@@ -319,13 +319,23 @@ fn to_rs_bin_op(
 fn to_rs_call(
     function: &Box<py::Expression>,
     args: &[py::Expression],
-    keywords: &Vec<py::Keyword>,
+    kw_args: &Vec<py::Keyword>,
     ctx: &mut AstContext,
 ) -> rs::ExprKind {
     warn!("Mapping call: {:?}", function);
-    if keywords.len() != 0 {
-        ctx.unimplemented_parameter("call", "kewords", keywords);
+
+    // HACK: just append keyword arguments as ordinary arguments
+    if kw_args.len() != 0 {
+        warn!(
+            "Mapping keyword arguments to ordinary arguments, keyword arguments: {:?}",
+            args
+        );
     }
+    let args = args
+        .iter()
+        .cloned()
+        .chain(kw_args.iter().map(|keyword| keyword.value.clone()))
+        .collect::<Vec<py::Expression>>();
 
     // Transpile args
     let mut args: Vec<P<rs::Expr>> = args
