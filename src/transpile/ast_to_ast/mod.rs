@@ -321,8 +321,11 @@ fn visit_import_symbol(name: &py::ImportSymbol, ctx: &mut AstContext) {
         ImportKind::Local => true,
         ImportKind::Foreign => false,
     };
-    let rust_node = create_use_node(is_local, symbol, alias.as_ref(), ctx);
-    ctx.emit(rust_node);
+    // HACK: only emit local nodes
+    if is_local {
+        let rust_node = create_use_node(is_local, symbol, alias.as_ref(), ctx);
+        ctx.emit(rust_node);
+    }
 }
 
 /// Visits a Python assign statement to emit a transpiled Rust assign statement.

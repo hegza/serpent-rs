@@ -147,7 +147,22 @@ impl<'py_ast> AstContext<'py_ast> {
     }
 
     pub fn identify_import(&self, symbol: &str) -> ImportKind {
-        if self.relative_mod_symbols.iter().any(|s| s == symbol) {
+        if self.relative_mod_symbols.iter().any(|s| {
+            // Aggregate symbol parts one by one
+            let mut iter = symbol.split("::");
+            let mut aggregator = String::new();
+            while let Some(next) = iter.next() {
+                if aggregator.is_empty() {
+                    aggregator.push_str(next);
+                } else {
+                    aggregator.push_str(&format!("::{}", next));
+                }
+                if s == &aggregator {
+                    return true;
+                }
+            }
+            return false;
+        }) {
             trace!(
                 "Resolved '{}' as a local symbol, local symbol table: {:?}",
                 symbol,
