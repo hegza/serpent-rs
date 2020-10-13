@@ -9,15 +9,15 @@ remap = "crate ndarray"
 
 ## Map log, sqrt, and exp to respective element-wise operations
 [numpy.log]
-remap = "call ndarray::ArrayBase::map"
+remap = "call ndarray::ArrayBase::mapv"
 push_parameter = "f64::ln"
 
 [numpy.sqrt]
-remap = "call ndarray::ArrayBase::map"
+remap = "call ndarray::ArrayBase::mapv"
 push_parameter = "f64::sqrt"
 
 [numpy.exp]
-remap = "call ndarray::ArrayBase::map"
+remap = "call ndarray::ArrayBase::mapv"
 push_parameter = "f64::exp"
 
 [numpy.random.rand]
