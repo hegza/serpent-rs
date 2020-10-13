@@ -98,7 +98,11 @@ impl RemapContext {
                 let unaliased = self.resolve_alias(inner);
                 vec![unaliased, name.to_owned()]
             }
-            _ => unimplemented!(),
+            // TODO: return result, improve error handling
+            expr => {
+                error!("could not convert {:?} to replacement path", expr);
+                vec![]
+            }
         }
     }
 

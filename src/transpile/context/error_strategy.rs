@@ -56,8 +56,8 @@ impl HandleUnimplementedAst for ListUnimplemented {
         location: &Location,
     ) {
         self.items.push(format!(
-            "{}: item `{}` for parameter `{} = {:?}`",
-            location, item_name, parameter_name, parameter
+            "{}: parameter `{}` = {:?} is not implemented for item `{}`",
+            location, parameter_name, parameter, item_name
         ));
 
         // Track the first untranspiled instance for returned error
