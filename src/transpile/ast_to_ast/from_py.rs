@@ -124,7 +124,9 @@ impl FromPy<py::Expression> for rs::ExprKind {
             }
             py::ExpressionType::True => ctx.unimplemented_item(expr),
             py::ExpressionType::False => ctx.unimplemented_item(expr),
-            py::ExpressionType::None => ctx.unimplemented_item(expr),
+            py::ExpressionType::None => {
+                return rs::ExprKind::Path(None, util::str_to_path("std::option::Option::None"));
+            }
             py::ExpressionType::Ellipsis => ctx.unimplemented_item(expr),
         };
 
