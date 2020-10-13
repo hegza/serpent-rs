@@ -100,7 +100,7 @@ impl RemapContext {
             }
             // TODO: return result, improve error handling
             expr => {
-                error!("could not convert {:?} to replacement path", expr);
+                warn!("remap is currently only implemented for attributes and identifiers implemented: cannot remap type {:?}", expr);
                 vec![]
             }
         }
