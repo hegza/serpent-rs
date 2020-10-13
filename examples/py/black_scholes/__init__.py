@@ -2,7 +2,6 @@
 import numpy as np
 import csv
 import pandas
-import pandas as pd
 import time
 
 from black_scholes import euro_vanilla_put, euro_vanilla_call
