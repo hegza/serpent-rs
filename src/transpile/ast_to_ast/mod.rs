@@ -389,6 +389,7 @@ fn create_local(pat: rs::Pat, init: Option<P<rs::Expr>>) -> rs::Local {
         init,
         span: dummy::span(),
         attrs: dummy::attr_vec(),
+        tokens: None,
     }
 }
 
@@ -429,6 +430,7 @@ fn create_param(param: &py::Parameter, ctx: &mut AstContext) -> rs::Param {
         id: dummy::node_id(),
         kind: ty,
         span: dummy::span(),
+        tokens: None,
     });
 
     rs::Param {
@@ -473,6 +475,7 @@ fn create_use_node(
     let prefix = rs::Path {
         span: dummy::span(),
         segments,
+        tokens: None,
     };
     let kind = rs::UseTreeKind::Simple(alias, dummy::node_id(), dummy::node_id());
     let span = dummy::span();
@@ -517,17 +520,23 @@ fn create_function_node(
     });
 
     let defaultness = rs::Defaultness::Final;
-    let fn_sig = rs::FnSig { header, decl };
+    let fn_sig = rs::FnSig {
+        header,
+        decl,
+        span: dummy::span(),
+    };
 
     // NOTE: Assume no attributes
     let attrs = vec![];
 
     // HACK: Make all items public by default
     let vis = rs::VisibilityKind::Public;
-    let vis = rustc_ap_rustc_span::source_map::Spanned {
-        node: vis,
+    let vis = rs::Visibility {
+        kind: vis,
         span: dummy::span(),
+        tokens: None,
     };
+
     // TODO: here is an opportunity to take a token stream as a parameter for more
     // effective fidelity printing
     // TODO: can be used to store transpiled tokens for further processing

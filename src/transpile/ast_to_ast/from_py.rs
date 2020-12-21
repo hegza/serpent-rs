@@ -136,6 +136,7 @@ impl FromPy<py::Expression> for rs::ExprKind {
             id: dummy::node_id(),
             rules: rs::BlockCheckMode::Default,
             span: dummy::span(),
+            tokens: None,
         };
         rs::ExprKind::Block(P(block), None)
     }
@@ -213,7 +214,7 @@ impl FromPy<py::Expression> for rs::PatKind {
             py::ExpressionType::NamedExpression { left: _, right: _ } => ctx.unimplemented_pat(expr),
             // The following Python expressions can not be Rust patterns
             py::ExpressionType::True | py::ExpressionType::False | py::ExpressionType::None | py::ExpressionType::Ellipsis => panic!(
-                "{:?} cannot be made into a Rust pattern, it's also likely invalid Python code unless transpiler implementation has a mistake"
+                "{:?} cannot be made into a Rust pattern, it's also likely invalid Python code unless transpiler implementation has a mistake", expr
             ),
         }
     }
@@ -225,6 +226,7 @@ impl FromPy<py::Expression> for rs::Pat {
             id: dummy::node_id(),
             kind: rs::PatKind::from_py(expr, ctx),
             span: dummy::span(),
+            tokens: None,
         }
     }
 }
@@ -691,6 +693,7 @@ impl FromPy<py::ExpressionType> for rs::FnRetTy {
             id: dummy::node_id(),
             kind,
             span: dummy::span(),
+            tokens: None,
         };
         rs::FnRetTy::Ty(P(ty))
     }

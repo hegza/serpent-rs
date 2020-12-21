@@ -20,6 +20,7 @@ pub fn str_to_pat(from: &str) -> ast::Pat {
         id: dummy::node_id(),
         kind: str_to_pat_kind(from),
         span: dummy::span(),
+        tokens: None,
     }
 }
 
@@ -44,6 +45,7 @@ pub fn str_to_path(id: &str) -> ast::Path {
     ast::Path {
         span: dummy::span(),
         segments,
+        tokens: None,
     }
 }
 

@@ -45,8 +45,9 @@ pub fn item(ident: symbol::Ident, kind: ast::ItemKind) -> ast::Item {
         id: node_id(),
         span: span(),
         vis: ast::Visibility {
-            node: ast::VisibilityKind::Public,
+            kind: ast::VisibilityKind::Public,
             span: span(),
+            tokens: None,
         },
         ident,
         kind: kind,

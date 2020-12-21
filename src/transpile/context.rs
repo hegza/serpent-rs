@@ -142,6 +142,7 @@ impl<'py_ast> AstContext<'py_ast> {
             id: dummy::node_id(),
             rules: rs::BlockCheckMode::Default,
             span: dummy::span(),
+            tokens: None,
         };
         P(block)
     }

@@ -23,12 +23,12 @@ rustpython-parser = { git = "https://github.com/hegza/rustpython", branch = "ser
 num-bigint = "0.3"
 
 # The Rust AST used by rustc. Auto-published from the Rust-repository.
-rustc-ap-rustc_ast = "673.0.0"
-# Dependencies of rustc_ast "673.0.0"
-rustc-ap-rustc_span = "673.0.0"
-rustc-ap-rustc_data_structures = "673.0.0"
+rustc-ap-rustc_ast = "694.0.0"
+# Dependencies of rustc_ast "694.0.0"
+rustc-ap-rustc_span = "694.0.0"
+rustc-ap-rustc_data_structures = "694.0.0"
 # Pretty printing for matching rustc AST.
-rustc-ap-rustc_ast_pretty = "673.0.0"
+rustc-ap-rustc_ast_pretty = "694.0.0"
 
 derive_deref = "^1.1"
 log = "^0.4"

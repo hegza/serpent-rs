@@ -21,6 +21,7 @@ fn create_mod_node(mod_name: &str) -> rust::NodeKind {
         inner: dummy::span(),
         items: vec![],
         inline: false,
+        unsafety: rs::Unsafe::No,
     };
 
     let rust_item = rs::ItemKind::Mod(mod_node);
