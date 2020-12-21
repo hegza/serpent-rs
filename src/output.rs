@@ -110,6 +110,7 @@ impl TranspiledFile {
         let nodes = self
             .content()
             .python_ast
+            .0
             .iter()
             .filter(|&node| match node {
                 python::NodeKind::Statement(_) => true,
@@ -193,7 +194,7 @@ impl TranspiledFile {
             let (py_ast, rs_ast) = {
                 if top_only {
                     (
-                        format!("{:?}", OpaqueFmt(|f| steps.py_ast.opaque_fmt(f))),
+                        format!("{:?}", OpaqueFmt(|f| steps.py_ast.0.opaque_fmt(f))),
                         format!("{:?}", OpaqueFmt(|f| steps.rs_ast.opaque_fmt(f))),
                     )
                 } else {
@@ -233,7 +234,7 @@ impl TranspiledFile {
             // format it and return as string instead.
             let (py_ast, rs_ast) = {
                 (
-                    format!("{:?}", OpaqueFmt(|f| transpiled.python_ast.opaque_fmt(f))),
+                    format!("{:?}", OpaqueFmt(|f| transpiled.python_ast.0.opaque_fmt(f))),
                     format!("{:?}", OpaqueFmt(|f| transpiled.rust_ast.opaque_fmt(f))),
                 )
             };

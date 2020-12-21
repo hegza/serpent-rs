@@ -18,12 +18,9 @@ use ast_to_ast::TranspileNode;
 use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
 use fs_err as fs;
-use itertools::Itertools;
 use log::{debug, info, warn};
-use parser_ext::{parse_comments, parse_orphan_newlines};
-use python::{Node, PythonAst};
+use python::PythonAst;
 use rustc_ap_rustc_span::with_default_session_globals;
-use rustpython_parser::{location::Location, parser as py_parser};
 use std::{ffi, path};
 
 /// Transpiles a module from the given directory to Rust.
@@ -68,8 +65,8 @@ fn ast_to_ast(
     relative_mod_symbols: &[String],
     cfg: &TranspileConfig,
 ) -> Result<RustAst, crate::error::TranspileNodeError> {
-    let mut ast_ctx = AstContext::new(&relative_mod_symbols, py_ast, cfg);
-    for node in py_ast {
+    let mut ast_ctx = AstContext::new(&relative_mod_symbols, &py_ast.0, cfg);
+    for node in py_ast.0.iter() {
         node.transpile(&mut ast_ctx)?;
     }
 
@@ -85,7 +82,7 @@ fn codegen(rust_ast: &RustAst, cfg: &TranspileConfig) -> Result<String, ApiError
 ///
 /// # Arguments
 pub fn transpile_str(src: &str, cfg: &TranspileConfig) -> Result<TranspiledString, ApiError> {
-    let ast = parse_str_to_py_ast(&src)?;
+    let ast = src.parse::<PythonAst>()?;
 
     // The Python program is a sequence of statements, comments, and newlines
     // which can be translated to Rust
@@ -122,7 +119,7 @@ fn transpile_file(
         normalize_line_endings::normalized(fs::read_to_string(path)?.chars()).collect::<String>();
 
     // Parse file into an AST
-    let ast = parse_str_to_py_ast(&content)?;
+    let ast = content.parse::<PythonAst>()?;
 
     // Resolve relative mod symbols so that AST context can figure out which modules
     // are local and which are foreign
@@ -194,51 +191,6 @@ fn maybe_insert_crate_local_mods(
             rs_ast::insert_crate_local_mods(rust_ast, mod_symbols);
         }
         _ => {}
-    }
-}
-
-fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, ApiError> {
-    // Parse Python source into a Python AST using RustPython
-    let py_ast = py_parser::parse_program(src)?;
-    let stmt_nodes = py_ast
-        .statements
-        .into_iter()
-        .map(|stmt| python::NodeKind::from(stmt));
-
-    // Parse comments with their locations
-    let comments = parse_comments(src);
-    let comment_nodes = comments
-        .into_iter()
-        .map(|comment| python::NodeKind::Comment(comment));
-
-    // Parse orphan newlines with their locations
-    let newlines = parse_orphan_newlines(src);
-    let newline_nodes = newlines
-        .into_iter()
-        .map(|row| python::NodeKind::Newline(Location::new(row, 1)));
-
-    // Re-arrange comments and statements
-    let py_nodes = stmt_nodes
-        .merge_by(comment_nodes, |a, b| {
-            let (a_loc, b_loc) = (a.location(), b.location());
-            compare_locations(a_loc, b_loc)
-        })
-        .merge_by(newline_nodes, |a, b| {
-            let (a_loc, b_loc) = (a.location(), b.location());
-            compare_locations(a_loc, b_loc)
-        })
-        .collect::<PythonAst>();
-
-    Ok(py_nodes)
-}
-
-fn compare_locations(a_loc: &Location, b_loc: &Location) -> bool {
-    if a_loc.row() < b_loc.row() {
-        true
-    } else if a_loc.row() == b_loc.row() {
-        a_loc.column() < b_loc.column()
-    } else {
-        false
     }
 }
 
