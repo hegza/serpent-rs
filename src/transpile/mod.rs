@@ -19,9 +19,9 @@ use config::InferOption;
 use context::{AstContext, ProgramContext, RustAst};
 use fs_err as fs;
 use itertools::Itertools;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use parser_ext::{parse_comments, parse_orphan_newlines};
-use python::Node;
+use python::{Node, PythonAst};
 use rustc_ap_rustc_span::with_default_session_globals;
 use rustpython_parser::{location::Location, parser as py_parser};
 use std::{ffi, path};
@@ -62,8 +62,6 @@ pub fn transpile_module_dir(
 
     Ok(out)
 }
-
-type PythonAst = Vec<python::NodeKind>;
 
 fn ast_to_ast(
     py_ast: &PythonAst,
@@ -227,7 +225,7 @@ fn parse_str_to_py_ast(src: &str) -> Result<Vec<python::NodeKind>, ApiError> {
             let (a_loc, b_loc) = (a.location(), b.location());
             compare_locations(a_loc, b_loc)
         })
-        .collect::<Vec<python::NodeKind>>();
+        .collect::<PythonAst>();
 
     Ok(py_nodes)
 }

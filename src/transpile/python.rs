@@ -1,5 +1,7 @@
 use rustpython_parser::{ast, ast::Located, location::Location};
 
+pub type PythonAst = Vec<NodeKind>;
+
 /// A statement, newline or comment of Python with a start location.
 /// Everything that's required to create an expression in Rust.
 #[derive(PartialEq, Debug)]

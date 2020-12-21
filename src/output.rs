@@ -2,9 +2,12 @@ pub use crate::py_module::PyModule;
 use crate::{
     fmt::OpaqueDebug,
     fmt::OpaqueFmt,
-    transpile::{python, rust},
+    transpile::{
+        python::{self, Node},
+        rust,
+    },
 };
-use python::Node;
+use python::PythonAst;
 use rustc_ap_rustc_span::with_default_session_globals;
 
 use std::{fmt, ops::Deref, path};
@@ -77,7 +80,7 @@ impl Default for TranspiledFileKind {
 #[derive(Debug)]
 pub struct TranspiledString {
     pub python_source: String,
-    pub python_ast: Vec<python::NodeKind>,
+    pub python_ast: PythonAst,
     pub rust_ast: Vec<rust::NodeKind>,
     pub rust_target: String,
 }
@@ -314,7 +317,7 @@ impl Deref for TranspiledFile {
 #[derive(Debug)]
 struct TranspileStmtSteps {
     py_src: String,
-    py_ast: Vec<python::NodeKind>,
+    py_ast: PythonAst,
     rs_ast: Vec<rust::NodeKind>,
     rs_tgt: String,
 }

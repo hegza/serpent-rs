@@ -1,6 +1,5 @@
-use crate::transpile::ast_to_ast::{from_py::FromPy, util};
 use itertools::Itertools;
-use log::{error, warn};
+use log::warn;
 use rustc_ap_rustc_ast::ast as rs;
 use rustc_ap_rustc_span::symbol;
 use rustpython_parser::ast as py;
