@@ -101,7 +101,7 @@ impl PyModule {
         self.files.keys().cloned().collect::<Vec<String>>()
     }
     pub fn resolve_mod_symbols_relative_to(&self, _path: &path::PathBuf) -> Vec<String> {
-        warn!("Not implemented: resolving relative module symbols from Python module. Returning global symbols instead");
+        warn!("Resolving relative module symbols from Python is not implemented. Returning global symbols instead");
         self.resolve_global_mod_symbols()
     }
 

@@ -8,7 +8,7 @@ use super::{ast_to_ast::dummy, python};
 use crate::config::TranspileConfig;
 use crate::{error::TranspileNodeError, transpile::rust, PyModule};
 use error_strategy::*;
-use log::{error, trace};
+use log::trace;
 use python::Node;
 use remap::RemapContext;
 use rustc_ap_rustc_ast::ast as rs;

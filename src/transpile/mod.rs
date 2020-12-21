@@ -117,9 +117,11 @@ fn transpile_file(
 
     let kind = maybe_check_file_kind(path, cfg);
 
-    // Parse file into an AST
+    // Read file and normalize line endings (into '\n')
     let content =
         normalize_line_endings::normalized(fs::read_to_string(path)?.chars()).collect::<String>();
+
+    // Parse file into an AST
     let ast = parse_str_to_py_ast(&content)?;
 
     // Resolve relative mod symbols so that AST context can figure out which modules
