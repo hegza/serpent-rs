@@ -1,8 +1,8 @@
 [package]
-name = "serpent"
-version = "0.1.0"
 authors = ["Henri Lunnikivi <henri.lunnikivi@gmail.com>"]
 edition = "2018"
+name = "serpent"
+version = "0.1.0"
 
 [lib]
 name = "serpent"
@@ -18,33 +18,32 @@ path = "examples/transpile_black_scholes.rs"
 
 [dependencies]
 # Python AST
-rustpython-parser = { git = "https://github.com/hegza/rustpython", branch = "serpent" }
+rustpython-parser = {git = "https://github.com/hegza/rustpython", branch = "serpent"}
 # `num-bigint` "0.3" matching with `rustpython-parser` "master"
 num-bigint = "0.3"
 
 # The Rust AST used by rustc. Auto-published from the Rust-repository.
 rustc-ap-rustc_ast = "694.0.0"
 # Dependencies of rustc_ast "694.0.0"
-rustc-ap-rustc_span = "694.0.0"
-rustc-ap-rustc_data_structures = "694.0.0"
-# Pretty printing for matching rustc AST.
 rustc-ap-rustc_ast_pretty = "694.0.0"
+rustc-ap-rustc_data_structures = "694.0.0"
+rustc-ap-rustc_span = "694.0.0"
 
-derive_deref = "^1.1"
-log = "^0.4"
-pretty_env_logger = "^0.3"
-rustfmt = "^0.10"
 color-backtrace = "^0.3"
 ctor = "0.1.14"
-thiserror = "^1.0"
+derive_deref = "^1.1"
 itertools = "^0.9"
 lazy_static = "^1.4"
+log = "^0.4"
 normalize-line-endings = "0.3.0"
+pretty_env_logger = "^0.3"
+rustfmt = "^0.10"
+thiserror = "^1.0"
 # Drop-in replacement for std::fs with better errors.
 fs-err = "2.5.0"
 toml = "0.5.6"
 
 [dev-dependencies]
-sourcefile = "^0.1"
 anyhow = "^1.0"
+sourcefile = "^0.1"
 test-case = "^1.0"
