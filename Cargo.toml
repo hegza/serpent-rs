@@ -18,8 +18,9 @@ path = "examples/transpile_black_scholes.rs"
 
 [dependencies]
 # Python AST
+rustpython-ast = {git = "https://github.com/hegza/rustpython", branch = "serpent"}
 rustpython-parser = {git = "https://github.com/hegza/rustpython", branch = "serpent"}
-# `num-bigint` "0.3" matching with `rustpython-parser` "master"
+# `num-bigint` "0.3" matching with `rustpython-parser`
 num-bigint = "0.3"
 
 # The Rust AST used by rustc. Auto-published from the Rust-repository.

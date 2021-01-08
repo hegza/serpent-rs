@@ -1,6 +1,6 @@
 use crate::error::{ExpandError, TranspileNodeError};
 use log::warn;
-use rustpython_parser::location::Location;
+use rustpython_ast::Location;
 use std::fmt::Debug;
 
 pub trait HandleUnimplementedAst {

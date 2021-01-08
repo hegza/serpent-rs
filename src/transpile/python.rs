@@ -3,7 +3,8 @@ use std::{iter::FromIterator, str::FromStr};
 use crate::transpile::parser_ext::{parse_comments, parse_orphan_newlines};
 use crate::ApiError;
 use itertools::Itertools;
-use rustpython_parser::{ast, ast::Located, location::Location, parser as py_parser};
+use rustpython_parser::{ast, ast::Located, parser as py_parser};
+use rustpython_ast::Location;
 
 #[derive(Debug)]
 pub struct PythonAst(pub(crate) Vec<NodeKind>);

@@ -1,7 +1,7 @@
-//! Parser extensions required{Location::new(), location: (), node: ()}Python to
-//! Rust.
+//! Parser extensions required for converting Python to Rust.
 
-use rustpython_parser::ast::{Located, Location};
+use rustpython_parser::ast::Located;
+use rustpython_ast::Location;
 
 /// Parses Python single-line comments, anything after '#' per line.
 pub fn parse_comments(source: &str) -> Vec<Located<String>> {
@@ -23,6 +23,7 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
                     comments.push(Located {
                         location,
                         node: content,
+                        custom: (),
                     });
                 }
                 row += 1;
@@ -42,6 +43,7 @@ pub fn parse_comments(source: &str) -> Vec<Located<String>> {
         comments.push(Located {
             location,
             node: content,
+            custom: (),
         });
     }
 
@@ -78,10 +80,12 @@ mod test {
             Located {
                 location: Location::new(1, 1),
                 node: " Test comment".to_owned(),
+                custom: (),
             },
             Located {
                 location: Location::new(3, 5),
                 node: " Indented comment".to_owned(),
+                custom: (),
             },
         ];
 

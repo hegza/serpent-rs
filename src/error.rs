@@ -26,7 +26,8 @@
 
 use std::{fmt, io};
 
-use rustpython_parser::{error::ParseError, location::Location};
+use rustpython_parser::error::ParseError;
+use rustpython_ast::Location;
 use thiserror::Error as ThisError;
 
 /// An error that occurred due to a top-level API call.
