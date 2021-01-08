@@ -46,4 +46,5 @@ toml = "^0.5"
 [dev-dependencies]
 anyhow = "^1.0"
 sourcefile = "^0.1"
-test-case = "^1.0"
+# This is the newest test-case that is not broken by depending on "syn = *"
+test-case = "0.3.0"
